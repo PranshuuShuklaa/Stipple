@@ -1,0 +1,47 @@
+# Local agent instructions (kept on this machine, never published)
+AGENTS.md
+DESIGN.md
+PROMPTS.md
+WORKFLOW.md
+PROJECT.md
+HANDOFF.md
+reference/
+.agent/
+.gemini/
+GEMINI.md
+.opencode/
+opencode.json
+
+# Secrets and environment (API keys live here, never in git)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+
+# Dependencies
+node_modules/
+.pnp*
+
+# Build output and caches
+.next/
+out/
+dist/
+.vercel/
+.turbo/
+*.tsbuildinfo
+next-env.d.ts
+
+# Test output
+coverage/
+playwright-report/
+test-results/
+
+# Logs
+*.log
+
+# OS and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
