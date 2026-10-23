@@ -2,9 +2,13 @@ import { animate, stagger } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { MOTION } from './motion'
 import { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewport } from './layouts/files'
+import { calculateLanguagesLayout } from './layouts/languages'
+import { calculateActivityLayout } from './layouts/activity'
+import { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
 import { resolveThemeColors } from './colors'
+import { SpatialGrid } from './spatial-grid'
 
-export type LayoutName = 'files'
+export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
 
 export interface MorphOptions {
   origin?: 'center' | 'first' | 'last' | [number, number]
@@ -16,6 +20,10 @@ export interface DotEngineOptions {
   container?: HTMLElement
   scan: Scan
   theme?: ThemeColors
+  initialLayout?: LayoutName
+  onHoverChange?: (fileIndex: number | null) => void
+  onLabelsChange?: (labels: FolderLabel[] | null) => void
+  onLayoutChange?: (layout: LayoutName) => void
 }
 
 interface DotProgressTarget {
@@ -24,7 +32,7 @@ interface DotProgressTarget {
 
 /**
  * Framework-free Dot Engine.
- * High-performance 2D canvas renderer using typed arrays and anime.js v4 motion.
+ * High-performance 2D canvas renderer using typed arrays, spatial hashing, and anime.js v4 motion.
  */
 export class DotEngine {
   private canvas: HTMLCanvasElement
@@ -76,10 +84,21 @@ export class DotEngine {
   private isDestroyed = false
   private rafId: number | null = null
 
-  // Observers
+  // Observers & event listeners
   private resizeObserver: ResizeObserver | null = null
   private intersectionObserver: IntersectionObserver | null = null
   private boundVisibilityChange: () => void
+  private boundPointerMove: (e: PointerEvent) => void
+  private boundPointerLeave: () => void
+
+  // Spatial grid for O(1) hover queries
+  private spatialGrid = new SpatialGrid(36)
+  private hoveredIndex = -1
+
+  // Callbacks
+  private onHoverChange?: (fileIndex: number | null) => void
+  private onLabelsChange?: (labels: FolderLabel[] | null) => void
+  private onLayoutChange?: (layout: LayoutName) => void
 
   // Current layout cache
   private currentLayout: LayoutName = 'files'
@@ -94,6 +113,9 @@ export class DotEngine {
     this.container = options.container ?? this.canvas.parentElement ?? this.canvas
     this.scan = options.scan
     this.theme = options.theme ?? resolveThemeColors(this.container)
+    this.onHoverChange = options.onHoverChange
+    this.onLabelsChange = options.onLabelsChange
+    this.onLayoutChange = options.onLayoutChange
 
     this.dotCount = this.scan.files.length
 
@@ -130,15 +152,19 @@ export class DotEngine {
     this.updateDimensions()
     this.initStartState()
 
-    // Setup observers
+    // Setup observers and listeners
     this.boundVisibilityChange = this.handleVisibilityChange.bind(this)
+    this.boundPointerMove = this.handlePointerMove.bind(this)
+    this.boundPointerLeave = this.handlePointerLeave.bind(this)
     this.setupObservers()
+    this.setupPointerListeners()
 
     // Start loop
     this.checkLoop()
 
-    // Initial transition into Files
-    this.morphTo('files')
+    // Initial transition into target layout
+    const initial = options.initialLayout ?? 'files'
+    this.morphTo(initial)
   }
 
   private updateDimensions(): boolean {
@@ -234,6 +260,36 @@ export class DotEngine {
     this.isPageVisible = !document.hidden
   }
 
+  private setupPointerListeners(): void {
+    this.canvas.addEventListener('pointermove', this.boundPointerMove)
+    this.canvas.addEventListener('pointerleave', this.boundPointerLeave)
+  }
+
+  private handlePointerMove(e: PointerEvent): void {
+    const rect = this.canvas.getBoundingClientRect()
+    const qx = e.clientX - rect.left
+    const qy = e.clientY - rect.top
+
+    // Query spatial grid with max hit distance
+    const hitRadius = 24
+    const nearest = this.spatialGrid.findNearest(qx, qy, hitRadius)
+    const newIndex = nearest ? nearest.index : -1
+
+    if (newIndex !== this.hoveredIndex) {
+      this.hoveredIndex = newIndex
+      this.onHoverChange?.(newIndex !== -1 ? newIndex : null)
+      this.render()
+    }
+  }
+
+  private handlePointerLeave(): void {
+    if (this.hoveredIndex !== -1) {
+      this.hoveredIndex = -1
+      this.onHoverChange?.(null)
+      this.render()
+    }
+  }
+
   private handleVisibilityChange(): void {
     this.isPageVisible = !document.hidden
     this.checkLoop()
@@ -254,25 +310,35 @@ export class DotEngine {
   }
 
   private handleResize(): void {
-    // When viewport resizes, recalculate current layout target and update target positions
     const target = this.getLayoutTarget(this.currentLayout)
     for (let i = 0; i < this.dotCount; i++) {
       this.targetX[i] = target.x[i]
       this.targetY[i] = target.y[i]
       this.targetSize[i] = target.size[i]
-      // If animation is completed, snap to targets
       if (this.progressTargets[i].p >= 1) {
         this.x[i] = target.x[i]
         this.y[i] = target.y[i]
         this.size[i] = target.size[i]
       }
     }
+
+    if (this.currentLayout === 'folders' && 'labels' in target) {
+      this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
+    }
+
+    this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
     this.render()
   }
 
   public getLayoutTarget(layout: LayoutName): LayoutTarget {
     const viewport: Viewport = { width: this.width, height: this.height }
     switch (layout) {
+      case 'languages':
+        return calculateLanguagesLayout(this.scan, viewport, this.theme)
+      case 'activity':
+        return calculateActivityLayout(this.scan, viewport, this.theme)
+      case 'folders':
+        return calculateFoldersLayout(this.scan, viewport, this.theme)
       case 'files':
       default:
         return calculateFilesLayout(this.scan, viewport, this.theme)
@@ -281,16 +347,38 @@ export class DotEngine {
 
   /**
    * Morph to layout with anime.js v4 driving progress and stagger from center.
+   * Seamless and glitch-free under rapid switching in any direction.
    */
   public morphTo(layout: LayoutName, options?: MorphOptions): void {
     if (this.isDestroyed) return
 
     this.currentLayout = layout
+    this.onLayoutChange?.(layout)
+
     const target = this.getLayoutTarget(layout)
     const origin = options?.origin ?? 'center'
 
-    // Capture starting state from current rendered values
+    // Capture current in-flight positions before stopping previous animation
     for (let i = 0; i < this.dotCount; i++) {
+      const p = this.progressTargets[i].p
+      if (p < 1) {
+        this.x[i] = this.startX[i] + (this.targetX[i] - this.startX[i]) * p
+        this.y[i] = this.startY[i] + (this.targetY[i] - this.startY[i]) * p
+        this.size[i] = this.startSize[i] + (this.targetSize[i] - this.startSize[i]) * p
+        this.alpha[i] = this.startAlpha[i] + (this.targetAlpha[i] - this.startAlpha[i]) * p
+        this.r[i] = Math.round(this.startR[i] + (this.targetR[i] - this.startR[i]) * p)
+        this.g[i] = Math.round(this.startG[i] + (this.targetG[i] - this.startG[i]) * p)
+        this.b[i] = Math.round(this.startB[i] + (this.targetB[i] - this.startB[i]) * p)
+      } else {
+        this.x[i] = this.targetX[i]
+        this.y[i] = this.targetY[i]
+        this.size[i] = this.targetSize[i]
+        this.alpha[i] = this.targetAlpha[i]
+        this.r[i] = this.targetR[i]
+        this.g[i] = this.targetG[i]
+        this.b[i] = this.targetB[i]
+      }
+
       this.startX[i] = this.x[i]
       this.startY[i] = this.y[i]
       this.startSize[i] = this.size[i]
@@ -310,9 +398,17 @@ export class DotEngine {
       this.progressTargets[i].p = 0
     }
 
+    // Stop and discard previous animation
     if (this.currentAnimation) {
       this.currentAnimation.pause()
       this.currentAnimation = null
+    }
+
+    // Handle labels for folders layout
+    if (layout === 'folders' && 'labels' in target) {
+      this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
+    } else {
+      this.onLabelsChange?.(null)
     }
 
     const reducedMotion =
@@ -330,6 +426,7 @@ export class DotEngine {
         this.g[i] = this.targetG[i]
         this.b[i] = this.targetB[i]
       }
+      this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
       this.render()
       return
     }
@@ -343,8 +440,13 @@ export class DotEngine {
         from: origin,
       }),
       ease: MOTION.easing.inOut,
+      onComplete: () => {
+        this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
+      },
     })
 
+    // Build spatial grid with destination coordinates so hover works immediately
+    this.spatialGrid.build(target.x, target.y, target.size, this.dotCount, this.width, this.height)
     this.checkLoop()
   }
 
@@ -377,6 +479,10 @@ export class DotEngine {
 
     ctx.clearRect(0, 0, this.width, this.height)
 
+    const hovered = this.hoveredIndex
+    const hx = hovered !== -1 ? this.x[hovered] + this.size[hovered] / 2 : -9999
+    const hy = hovered !== -1 ? this.y[hovered] + this.size[hovered] / 2 : -9999
+
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
       const p = this.progressTargets[i].p
@@ -399,14 +505,38 @@ export class DotEngine {
         this.b[i] = this.targetB[i]
       }
 
-      const radius = this.size[i] / 2
-      const a = this.alpha[i]
+      let radius = this.size[i] / 2
+      let a = this.alpha[i]
+      const isHoveredDot = i === hovered
+
+      // Fisheye lift for dots within 80px radius (DESIGN.md)
+      if (hovered !== -1) {
+        const dotCx = this.x[i] + radius
+        const dotCy = this.y[i] + radius
+        const dx = dotCx - hx
+        const dy = dotCy - hy
+        const distSq = dx * dx + dy * dy
+        if (distSq < 6400) {
+          // within 80px
+          const dist = Math.sqrt(distSq)
+          const lift = (1 - dist / 80) * 1.8
+          radius += lift / 2
+          a = Math.min(1.0, a + 0.15)
+        }
+      }
 
       if (radius > 0.05 && a > 0.01) {
         ctx.fillStyle = `rgba(${this.r[i]}, ${this.g[i]}, ${this.b[i]}, ${a})`
         ctx.beginPath()
         ctx.arc(this.x[i] + radius, this.y[i] + radius, radius, 0, Math.PI * 2)
         ctx.fill()
+
+        if (isHoveredDot) {
+          // Subtle focus outline on hovered dot
+          ctx.strokeStyle = `rgba(${this.theme.fg[0]}, ${this.theme.fg[1]}, ${this.theme.fg[2]}, 0.8)`
+          ctx.lineWidth = 1.5
+          ctx.stroke()
+        }
       }
     }
   }
@@ -435,12 +565,20 @@ export class DotEngine {
       this.intersectionObserver = null
     }
 
+    if (this.canvas) {
+      this.canvas.removeEventListener('pointermove', this.boundPointerMove)
+      this.canvas.removeEventListener('pointerleave', this.boundPointerLeave)
+    }
+
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.boundVisibilityChange)
     }
   }
 
-  // Getters for inspectability and testing
+  public getCurrentLayout(): LayoutName {
+    return this.currentLayout
+  }
+
   public getDotCount(): number {
     return this.dotCount
   }
@@ -456,5 +594,9 @@ export class DotEngine {
       g: this.g[index],
       b: this.b[index],
     }
+  }
+
+  public getSpatialGrid(): SpatialGrid {
+    return this.spatialGrid
   }
 }

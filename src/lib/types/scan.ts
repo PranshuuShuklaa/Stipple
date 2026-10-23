@@ -4,6 +4,7 @@ export interface ScanFile {
   size: number
   language: string | null
   folder: string
+  week?: number
 }
 
 export interface ScanLanguage {

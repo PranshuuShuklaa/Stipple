@@ -106,6 +106,7 @@ export function createScanFixture(seedOrRepo: number | string = 'stipple/stipple
       size,
       language: langNames[langIndex] ?? 'Other',
       folder,
+      week,
     })
   }
 

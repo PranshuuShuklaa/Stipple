@@ -1,4 +1,8 @@
 export { DotEngine, type DotEngineOptions, type MorphOptions, type LayoutName } from './renderer'
 export { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewport } from './layouts/files'
+export { calculateLanguagesLayout } from './layouts/languages'
+export { calculateActivityLayout } from './layouts/activity'
+export { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
+export { SpatialGrid, type NearestDotResult } from './spatial-grid'
 export { resolveThemeColors, parseColor } from './colors'
 export { MOTION } from './motion'

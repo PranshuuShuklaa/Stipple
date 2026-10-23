@@ -1,8 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useImperativeHandle, forwardRef } from 'react'
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo } from 'react'
+import { animate, stagger } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
+import type { FolderLabel } from '@/engine/layouts/folders'
 import styles from './dot-stage.module.css'
 
 export interface DotStageProps {
@@ -10,20 +12,33 @@ export interface DotStageProps {
   className?: string
   ariaLabel?: string
   initialLayout?: LayoutName
+  onLayoutChange?: (layout: LayoutName) => void
 }
 
 export interface DotStageHandle {
   morphTo: (layout: LayoutName, options?: MorphOptions) => void
   getEngine: () => DotEngine | null
+  getCurrentLayout: () => LayoutName
+}
+
+function formatBytes(bytes: number): string {
+  if (bytes < 1024) return `${bytes} B`
+  if (bytes < 1024 * 1024) return `${(bytes / 1024).toFixed(1)} KB`
+  return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots' },
+  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const labelsRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<DotEngine | null>(null)
+
+  const [currentLayout, setCurrentLayout] = useState<LayoutName>(initialLayout)
+  const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
+  const [folderLabels, setFolderLabels] = useState<FolderLabel[] | null>(null)
 
   useImperativeHandle(
     ref,
@@ -32,9 +47,30 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         engineRef.current?.morphTo(layout, options)
       },
       getEngine: () => engineRef.current,
+      getCurrentLayout: () => engineRef.current?.getCurrentLayout() ?? currentLayout,
     }),
-    []
+    [currentLayout]
   )
+
+  // Calculate language distribution for legend
+  const languageStats = useMemo(() => {
+    const totalFiles = scan.files.length || 1
+    const counts = new Map<string, number>()
+    for (const f of scan.files) {
+      const lang = f.language || 'Other'
+      counts.set(lang, (counts.get(lang) ?? 0) + 1)
+    }
+
+    return scan.languages.slice(0, 5).map((l, i) => {
+      const count = counts.get(l.name) ?? 0
+      const pct = Math.round((count / totalFiles) * 100)
+      return {
+        name: l.name,
+        pct,
+        colorVar: `var(--c${i + 1})`,
+      }
+    })
+  }, [scan])
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -45,10 +81,21 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       canvas,
       container,
       scan,
+      initialLayout,
+      onHoverChange: (index) => {
+        setHoveredFileIndex(index)
+      },
+      onLabelsChange: (labels) => {
+        setFolderLabels(labels)
+      },
+      onLayoutChange: (layout) => {
+        setCurrentLayout(layout)
+        onLayoutChange?.(layout)
+      },
     })
     engineRef.current = engine
 
-    // Watch for manual data-theme changes on <html>
+    // Watch for theme changes on <html>
     const observer = new MutationObserver((mutations) => {
       for (const mutation of mutations) {
         if (mutation.type === 'attributes' && mutation.attributeName === 'data-theme') {
@@ -58,7 +105,6 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     })
     observer.observe(document.documentElement, { attributes: true })
 
-    // Watch for system color scheme changes
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleMediaChange = () => {
       engine.updateTheme()
@@ -71,9 +117,40 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       engine.destroy()
       engineRef.current = null
     }
-  }, [scan])
+  }, [scan, initialLayout, onLayoutChange])
+
+  // Animate folder labels on entry
+  useEffect(() => {
+    if (!folderLabels || folderLabels.length === 0 || !labelsRef.current) return
+
+    const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (reducedMotion) {
+      return
+    }
+
+    const elements = labelsRef.current.children
+    if (elements.length > 0) {
+      animate(elements, {
+        opacity: [0, 1],
+        translateY: [10, 0],
+        delay: stagger(90, { start: 800 }),
+        duration: 600,
+        ease: 'outQuad',
+      })
+    }
+  }, [folderLabels])
 
   const stageClassName = className ? `${styles.stage} ${className}` : styles.stage
+
+  // Hover readout text
+  const readoutContent = useMemo(() => {
+    if (hoveredFileIndex === null) {
+      return 'Hover a dot to see its file.'
+    }
+    const file = scan.files[hoveredFileIndex]
+    if (!file) return 'Hover a dot to see its file.'
+    return `${file.path}, ${file.language || 'Other'}, ${formatBytes(file.size)}`
+  }, [hoveredFileIndex, scan.files])
 
   return (
     <div ref={containerRef} className={stageClassName}>
@@ -83,6 +160,50 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         role="img"
         aria-label={ariaLabel}
       />
+
+      {/* Folders layout labels */}
+      <div ref={labelsRef} className={styles.labels} aria-hidden="true">
+        {folderLabels?.map((l) => (
+          <span
+            key={l.folder}
+            className={styles.lab}
+            style={{
+              left: `${l.x}px`,
+              top: `${l.y}px`,
+            }}
+          >
+            {l.folder} ({l.count})
+          </span>
+        ))}
+      </div>
+
+      {/* Hover readout top left */}
+      <p className={styles.readout} aria-live="polite">
+        {readoutContent}
+      </p>
+
+      {/* Legend bottom left */}
+      <div className={styles.legend} aria-hidden="true">
+        {currentLayout === 'files' && (
+          <span>{scan.files.length} files</span>
+        )}
+
+        {currentLayout === 'languages' && (
+          languageStats.map((item) => (
+            <span key={item.name} className={styles.legendItem}>
+              <i className={styles.swatch} style={{ background: item.colorVar }} />
+              {item.name} {item.pct}%
+            </span>
+          ))
+        )}
+
+        {currentLayout === 'activity' && (
+          <span className={styles.legendItem}>
+            <i className={styles.swatch} style={{ background: 'var(--c1)' }} />
+            Files changed per week. Left is 16 weeks ago, right is this week.
+          </span>
+        )}
+      </div>
     </div>
   )
 })
