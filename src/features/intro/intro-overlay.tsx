@@ -17,7 +17,8 @@
 
 import { useEffect, useRef } from 'react'
 import { createTimeline, animate } from 'animejs'
-import type { Timeline } from 'animejs'
+import type { Timeline, Target } from 'animejs'
+import type { QualityTier } from '@/engine/quality'
 import styles from './intro-overlay.module.css'
 
 const WORD = 'stipple'
@@ -32,6 +33,9 @@ const LETTER_COLORS = [
   '#9A7BFF', // 5 l  — violet
   '#FF5C9A', // 6 e  — pink
 ] as const
+
+// The engine's Files grid alpha (layouts/files.ts) — the handoff target
+const FILES_ALPHA = 0.85
 
 // Session key
 const SESSION_KEY = 'stipple:intro-played'
@@ -49,8 +53,10 @@ interface IntroDot {
   a: number
   // handoff progress h ∈ [0,1]
   h: number
-  // fill color
-  col: string
+  // fill color as [r, g, b]
+  col: [number, number, number]
+  // engine Files-grid color the grid dots fade into during handoff
+  fileColor: [number, number, number]
   // dot radius
   r: number
   // grid destination (240 picked dots)
@@ -61,10 +67,22 @@ interface IntroDot {
 
 // ─── Sampling ─────────────────────────────────────────────────────────────────
 
+/**
+ * Resolves the page's real font-family from computed style. next/font generates
+ * a hashed family name exposed through --font-sans, and neither the canvas font
+ * shorthand nor document.fonts.load() can use var() — the literal computed list
+ * is required for both.
+ */
+function resolveCanvasFontFamily(): string {
+  const computed = getComputedStyle(document.body).fontFamily
+  return computed.trim() || 'sans-serif'
+}
+
 function sample(
   W: number,
   H: number,
-  maxPts: number
+  maxPts: number,
+  fontFamily: string
 ): { pts: [number, number, number][]; gap: number } {
   const off = document.createElement('canvas')
   off.width = W
@@ -72,10 +90,10 @@ function sample(
   const g = off.getContext('2d')!
 
   // Size the word to 70% of width, max 50% of height
-  g.font = '600 100px var(--font-sans, "Familjen Grotesk", system-ui, sans-serif)'
+  g.font = `600 100px ${fontFamily}`
   const measure = g.measureText(WORD).width
   const fs = Math.min((100 * (W * 0.7)) / measure, H * 0.5)
-  g.font = `600 ${fs}px var(--font-sans, "Familjen Grotesk", system-ui, sans-serif)`
+  g.font = `600 ${fs}px ${fontFamily}`
   g.textBaseline = 'middle'
   g.fillStyle = '#fff'
 
@@ -117,12 +135,33 @@ function rnd(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo)
 }
 
+function hexToRgb(hex: string): [number, number, number] {
+  return [
+    parseInt(hex.slice(1, 3), 16),
+    parseInt(hex.slice(3, 5), 16),
+    parseInt(hex.slice(5, 7), 16),
+  ]
+}
+
+/**
+ * The engine renders Files dots in the page's current-theme fg color
+ * (tokens.css → --fg → body color), so the handoff target is body.color.
+ */
+function resolveFilesColor(): [number, number, number] {
+  const m = getComputedStyle(document.body).color
+    .match(/rgba?\(\s*([\d.]+)[,\s]+([\d.]+)[,\s]+([\d.]+)/)
+  return m
+    ? [Math.round(Number(m[1])), Math.round(Number(m[2])), Math.round(Number(m[3]))]
+    : hexToRgb(LETTER_COLORS[0])
+}
+
 function buildDots(
   pts: [number, number, number][],
   gap: number,
   W: number,
   H: number,
-  stageRect: DOMRect | null
+  stageRect: DOMRect | null,
+  filesColor: [number, number, number]
 ): IntroDot[] {
   // Compute grid destination from real stage rect (REFERENCE.md — zero-jump)
   let gx0: number, gy0: number, P: number, gridRadius: number
@@ -158,7 +197,7 @@ function buildDots(
 
   return pts.map((p, i) => {
     const [tx, ty, letterIdx] = p
-    const col = LETTER_COLORS[letterIdx % LETTER_COLORS.length]
+    const col = hexToRgb(LETTER_COLORS[letterIdx % LETTER_COLORS.length])
 
     const sx = rnd(-0.1 * W, 1.1 * W)
     const sy = rnd(-0.1 * H, 1.1 * H)
@@ -173,7 +212,7 @@ function buildDots(
     // Grid destination
     let gxDot: number | null = null
     let gyDot: number | null = null
-    let gr = gridRadius
+    const gr = gridRadius
     let ox = 0, oy = 0
 
     if (pick.has(i)) {
@@ -189,7 +228,10 @@ function buildDots(
     return {
       sx, sy, cpx, cpy, tx, ty,
       t: 0, a: 0, h: 0,
-      col, r: dotR,
+      col,
+      // Grid dots fade into the engine Files color; scatter dots ignore it
+      fileColor: gxDot !== null ? filesColor : col,
+      r: dotR,
       gx: gxDot, gy: gyDot, gr,
       ox, oy,
     }
@@ -217,12 +259,23 @@ function drawFrame(
     let r = d.r
     let al = d.a
 
+    // Blended fill color (letter color; grid dots fade the letter color out)
+    let cr = d.col[0]
+    let cg = d.col[1]
+    let cb = d.col[2]
+
     // Handoff blend
     if (d.h > 0) {
       if (d.gx !== null && d.gy !== null) {
         x += (d.gx - x) * d.h
         y += (d.gy - y) * d.h
         r += (d.gr - r) * d.h
+        // Color and alpha fade into the engine's Files look (theme fg, 0.85)
+        // so the overlay's last frame matches the engine's first frame 1:1
+        al += (FILES_ALPHA - al) * d.h
+        cr += (d.fileColor[0] - cr) * d.h
+        cg += (d.fileColor[1] - cg) * d.h
+        cb += (d.fileColor[2] - cb) * d.h
       } else {
         x += d.ox * d.h
         y += d.oy * d.h
@@ -247,7 +300,7 @@ function drawFrame(
     if (al < 0.01) continue
 
     ctx.globalAlpha = Math.max(0, Math.min(1, al))
-    ctx.fillStyle = d.col
+    ctx.fillStyle = `rgb(${Math.round(cr)}, ${Math.round(cg)}, ${Math.round(cb)})`
     ctx.beginPath()
     ctx.arc(x, y, actualR, 0, Math.PI * 2)
     ctx.fill()
@@ -265,9 +318,11 @@ interface IntroOverlayProps {
   headlineRef: React.RefObject<HTMLElement | null>
   /** called when the intro is done so the parent can show the real stage */
   onDone: () => void
+  /** reads the mounted DotEngine's current quality tier (Low = 600 dots, no shockwave) */
+  getTier?: () => QualityTier | null
 }
 
-export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProps) {
+export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skipRef = useRef<HTMLParagraphElement>(null)
@@ -317,10 +372,6 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
     const ctx = canvas.getContext('2d')!
     ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
 
-    // Quality tier check – Low ≤ 600 dots, no shockwave
-    const isLowTier = window.matchMedia('(prefers-reduced-motion: reduce)').matches
-    const maxPts = isLowTier ? 600 : 2400
-
     // ── Wait for font then sample ─────────────────────────────────────────────
     let rafId: number
     let timeline: Timeline | null = null
@@ -328,13 +379,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
     const rings: Ring[] = []
     let isDone = false
 
-    // Get real stage rect for zero-jump handoff
-    const stageRect = stageRef.current
-      ? stageRef.current.getBoundingClientRect()
-      : null
+    // The literal computed family list (next/font uses a generated name)
+    const fontFamily = resolveCanvasFontFamily()
 
     function triggerShockwave(x: number, y: number, amp: number, maxR: number, dur: number) {
-      if (isLowTier) return
+      // The engine is the tier authority; re-read it live (its 60-frame
+      // measurement usually completes during the intro's first half)
+      if (getTier?.()?.name === 'low') return
       const ring: Ring = { x, y, r: 0, amp }
       rings.push(ring)
       animate(ring, {
@@ -359,36 +410,46 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
       isDone = true
       sessionStorage.setItem(SESSION_KEY, '1')
       if (skipRef.current) skipRef.current.classList.add(styles.skipHidden)
-      // Small delay to let the handoff frame render, then remove overlay
+      // Small delay to let the handoff frame render. Do NOT detach the
+      // overlay from the DOM here: React owns this node (the page renders it
+      // conditionally) and a manual .remove() breaks React's own unmount
+      // with "removeChild: The node to be removed is not a child of this
+      // node". onDone flips the parent state and React unmounts it cleanly.
       setTimeout(() => {
         cancelAnimationFrame(rafId)
-        overlay.remove()
         onDone()
       }, 60)
     }
 
-    // Skip handler: jump to end of timeline in 300 ms (REFERENCE.md)
-    let skipThrottled = false
-    function handleSkip() {
-      if (isDone || skipThrottled) return
-      skipThrottled = true
-      if (timeline) {
-        // Force all dots to their final handoff state, then animate bg out quickly
-        for (const d of dots) { d.h = 1 }
-        // Animate the overlay bg to transparent in 300 ms
-        const bgEl = overlayRef.current?.querySelector<HTMLElement>(`.${styles.overlayBg}`)
-        if (bgEl) {
-          animate(bgEl, { opacity: 0, duration: 300, ease: 'linear', onComplete: finish })
-        } else {
-          finish()
-        }
-        timeline.pause()
-        // Also show headline immediately
-        if (headlineRef.current) {
-          headlineRef.current.style.opacity = '1'
-          headlineRef.current.style.transform = 'none'
-        }
+    // Skip: click, tap, Escape, any key or scroll jumps straight to the
+    // handoff end state; the overlay background then fades out in 300 ms
+    let skipRequested = false
+    function skipToFinishedState() {
+      if (!timeline) return
+      timeline.pause()
+      // Force all dots to their final handoff state, then fade the bg quickly
+      for (const d of dots) { d.h = 1 }
+      const bgEl = overlayRef.current?.querySelector<HTMLElement>(`.${styles.overlayBg}`)
+      if (bgEl) {
+        animate(bgEl, { opacity: 0, duration: 300, ease: 'linear', onComplete: finish })
+      } else {
+        finish()
       }
+      // Show the headline immediately
+      if (headlineRef.current) {
+        headlineRef.current.style.opacity = '1'
+        headlineRef.current.style.transform = 'none'
+      }
+    }
+    function handleSkip() {
+      if (isDone) return
+      skipRequested = true
+      // Detach every skip listener: one skip is one skip
+      removeSkipListeners()
+      if (timeline) {
+        skipToFinishedState()
+      }
+      // Timeline not built yet (font wait): startIntro consumes skipRequested
     }
 
     const skipEvents = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const
@@ -404,8 +465,19 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
     }
 
     function startIntro() {
-      const { pts, gap } = sample(W, H, maxPts)
-      dots = buildDots(pts, gap, W, H, stageRect)
+      // The engine is the quality-tier authority: Low caps the word sampling
+      // at 600 dots (High/Medium use up to 2,400). If the engine has not
+      // finished its 60-frame measurement yet it still reports High; the
+      // shockwave check re-reads the tier live at 1800 ms.
+      const maxPts = getTier?.()?.name === 'low' ? 600 : 2400
+      // Read the demo stage's real rect here (lazy): the intro's effect runs
+      // before DotStage's sibling effect, but this runs at least one task
+      // later (after the font wait), so the reported element exists by then.
+      // Falls back to the prototype geometry if the stage is not available.
+      const stageRect = stageRef.current?.getBoundingClientRect() ?? null
+      const { pts, gap } = sample(W, H, maxPts, fontFamily)
+      const filesColor = resolveFilesColor()
+      dots = buildDots(pts, gap, W, H, stageRect, filesColor)
 
       const maxD = Math.hypot(W, H) / 2
 
@@ -447,7 +519,11 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
           t: 1,
           duration: 1000,
           ease: 'outElastic(1, 0.85)',
-          delay: (d: IntroDot) => (d.tx / W) * 350,
+          // anime.js v4 function-based value: (target, index, targets)
+          delay(target?: Target) {
+            const dot = target as unknown as IntroDot | undefined
+            return ((dot?.tx ?? 0) / W) * 350
+          },
         },
         400
       )
@@ -471,8 +547,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
           h: 1,
           duration: 650,
           ease: 'inOutExpo',
-          delay: (d: IntroDot) =>
-            (Math.hypot(d.tx - W / 2, d.ty - H / 2) / maxD) * 200,
+          // anime.js v4 function-based value: (target, index, targets)
+          delay(target?: Target) {
+            const dot = target as unknown as IntroDot | undefined
+            return (
+              (Math.hypot((dot?.tx ?? 0) - W / 2, (dot?.ty ?? 0) - H / 2) / maxD) * 200
+            )
+          },
         },
         2400
       )
@@ -502,11 +583,17 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
         removeSkipListeners()
         finish()
       })
+
+      // A skip that arrived during the font wait: jump to the end now
+      if (skipRequested) {
+        skipRequested = false
+        skipToFinishedState()
+      }
     }
 
     // Wait for font (up to 1200 ms), then start
     Promise.race([
-      document.fonts.load('600 100px var(--font-sans, "Familjen Grotesk")'),
+      document.fonts.load(`600 100px ${fontFamily}`),
       new Promise<void>((r) => setTimeout(r, 1200)),
     ])
       .catch(() => {})
@@ -530,7 +617,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone }: IntroOverlayProp
       removeSkipListeners()
       document.removeEventListener('visibilitychange', handleVisibility)
     }
-  }, [stageRef, headlineRef, onDone])
+  }, [stageRef, headlineRef, onDone, getTier])
 
   return (
     <div ref={overlayRef} className={styles.overlay} aria-hidden="true">

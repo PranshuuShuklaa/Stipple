@@ -16,6 +16,10 @@ export interface DotStageProps {
   onLayoutChange?: (layout: LayoutName) => void
   /** Dev-only fps/tier/dot-count overlay (used by the /dev/engine stage). */
   showDevOverlay?: boolean
+  /** Reports the stage's real container element once it exists (used by the intro for the zero-jump handoff). */
+  onStageElementReady?: (el: HTMLDivElement) => void
+  /** Reports the dot engine (null on unmount) — e.g. so the intro can read the real quality tier. */
+  onEngineReady?: (engine: DotEngine | null) => void
 }
 
 export interface DotStageHandle {
@@ -31,7 +35,7 @@ function formatBytes(bytes: number): string {
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false },
+  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, onStageElementReady, onEngineReady },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -94,6 +98,9 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     const container = containerRef.current
     if (!canvas || !container) return
 
+    // Report the real panel element before anything reads the stage's rect
+    onStageElementReady?.(container)
+
     const engine = new DotEngine({
       canvas,
       container,
@@ -114,6 +121,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       },
     })
     engineRef.current = engine
+    onEngineReady?.(engine)
     readEngineStats()
 
     // Watch for theme changes on <html>
@@ -137,8 +145,9 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       mediaQuery.removeEventListener('change', handleMediaChange)
       engine.destroy()
       engineRef.current = null
+      onEngineReady?.(null)
     }
-  }, [scan, initialLayout, onLayoutChange, readEngineStats])
+  }, [scan, initialLayout, onLayoutChange, readEngineStats, onStageElementReady, onEngineReady])
 
   // Dev-only stats polling for the overlay; tier changes broadcast via onTierChange
   useEffect(() => {

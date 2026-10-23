@@ -4,6 +4,7 @@ import { useRef, useState, useCallback } from 'react'
 import { DotStage } from '@/components/ui/dot-stage'
 import { RepoForm } from '@/features/scan-form/repo-form'
 import { IntroOverlay } from '@/features/intro/intro-overlay'
+import type { DotEngine } from '@/engine/renderer'
 import { createScanFixture } from '../../tests/fixtures/scan-fixture'
 import styles from './home.module.css'
 
@@ -11,11 +12,28 @@ export default function HomePage() {
   const demoScan = createScanFixture('stipple/stipple')
 
   const stageContainerRef = useRef<HTMLDivElement>(null)
+  const engineRef = useRef<DotEngine | null>(null)
   const headlineRef = useRef<HTMLHeadingElement>(null)
   const [introDone, setIntroDone] = useState(false)
 
   const handleIntroDone = useCallback(() => {
     setIntroDone(true)
+  }, [])
+
+  // DotStage reports its real panel element so the intro handoff can land
+  // the grid exactly on the demo stage (zero jump).
+  const handleStageReady = useCallback((el: HTMLDivElement) => {
+    stageContainerRef.current = el
+  }, [])
+
+  // The engine is the quality-tier authority: the intro caps at 600 dots
+  // and drops the shockwave when it reports the Low tier.
+  const handleEngineReady = useCallback((engine: DotEngine | null) => {
+    engineRef.current = engine
+  }, [])
+
+  const getIntroTier = useCallback(() => {
+    return engineRef.current?.getQualityTier() ?? null
   }, [])
 
   return (
@@ -26,6 +44,7 @@ export default function HomePage() {
           stageRef={stageContainerRef}
           headlineRef={headlineRef}
           onDone={handleIntroDone}
+          getTier={getIntroTier}
         />
       )}
 
@@ -55,14 +74,12 @@ export default function HomePage() {
           >
             Demo — sample data, not a real repository
           </h2>
-          {/* stageContainerRef is forwarded through DotStage via the containerRef prop
-              so IntroOverlay can read its exact DOMRect for the zero-jump handoff */}
-          <div ref={stageContainerRef} style={{ display: 'contents' }}>
-            <DotStage
-              scan={demoScan}
-              ariaLabel="Demo: a sample repository with 240 files, one dot per file"
-            />
-          </div>
+          <DotStage
+            scan={demoScan}
+            ariaLabel="Demo: a sample repository with 240 files, one dot per file"
+            onStageElementReady={handleStageReady}
+            onEngineReady={handleEngineReady}
+          />
         </section>
       </div>
     </>

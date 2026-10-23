@@ -240,7 +240,7 @@ describe('Low-tier dot cap', () => {
   it('caps at 600 for low tier', () => {
     const maxPts = 600
     // simulate gap growth until pts.length ≤ maxPts
-    let gap = 5
+    const gap = 5
     // With 600 allowed pts and gap=5, we stop
     expect(maxPts).toBe(600)
     // With high/medium tier
