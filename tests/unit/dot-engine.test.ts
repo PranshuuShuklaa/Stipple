@@ -12,6 +12,7 @@ import { calculateActivityLayout } from '@/engine/layouts/activity'
 import { calculateFoldersLayout, FOLDER_CENTERS } from '@/engine/layouts/folders'
 import { SpatialGrid } from '@/engine/spatial-grid'
 import { parseColor } from '@/engine/colors'
+import { pickMorphOrigin, type MorphOptions } from '@/engine/renderer'
 
 const theme = {
   fg: [26, 21, 51] as [number, number, number],
@@ -276,5 +277,25 @@ describe('Color Utilities', () => {
     expect(parseColor('#5B2BE0')).toEqual([91, 43, 224])
     expect(parseColor('#FFF')).toEqual([255, 255, 255])
     expect(parseColor('rgb(10, 20, 30)')).toEqual([10, 20, 30])
+  })
+})
+
+describe('pickMorphOrigin', () => {
+  it('an explicit options.origin always wins', () => {
+    expect(pickMorphOrigin('first', [50, 60])).toBe('first')
+    expect(pickMorphOrigin([10, 20], [50, 60])).toEqual([10, 20])
+  })
+
+  it('falls back to the last click point (canvas-local [x, y])', () => {
+    expect(pickMorphOrigin(undefined, [50, 60])).toEqual([50, 60])
+  })
+
+  it('defaults to the center without a click', () => {
+    expect(pickMorphOrigin(undefined, null)).toBe('center')
+  })
+
+  it('uses plain origin unions as-is', () => {
+    const opts: MorphOptions['origin'] = 'last'
+    expect(pickMorphOrigin(opts, null)).toBe('last')
   })
 })

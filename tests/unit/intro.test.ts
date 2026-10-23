@@ -1,79 +1,21 @@
 /**
  * Unit tests for intro boot-sequence logic.
- * Pure-math functions are extracted and tested in isolation (no DOM/Canvas needed).
+ * Tests the real shared math in src/features/intro/intro-math.ts —
+ * the component imports the same functions, so the tests cannot drift.
  */
 import { describe, it, expect } from 'vitest'
-
-// ── Sampling math (mirrored from intro-overlay.tsx) ───────────────────────────
-
-function computeGap(fontSize: number): number {
-  return Math.max(5, Math.round(fontSize / 42))
-}
-
-function computeFontSize(wordWidth: number, W: number, H: number): number {
-  return Math.min((100 * (W * 0.7)) / wordWidth, H * 0.5)
-}
-
-// ── Grid geometry (mirrored from intro-overlay.tsx) ───────────────────────────
-
-function computeGridFromStage(
-  stageW: number, stageH: number,
-  stageLeft: number, stageTop: number
-): { P: number; gx0: number; gy0: number; gr: number } {
-  const P = Math.min(stageW / 25, stageH / 13)
-  const baseS = Math.max(6, Math.min(12, Math.round(stageW / 90)))
-  const s = Math.min(baseS, Math.max(4, 0.8 * P))
-  const gridRadius = s / 2
-  const sCx = stageLeft + stageW / 2
-  const sCy = stageTop + stageH / 2 - 8
-  const gx0 = sCx - 11.5 * P
-  const gy0 = sCy - 4.5 * P
-  return { P, gx0, gy0, gr: gridRadius }
-}
-
-function gridDotPosition(
-  n: number, gx0: number, gy0: number, P: number
-): { gx: number; gy: number } {
-  return {
-    gx: gx0 + (n % 24) * P,
-    gy: gy0 + Math.floor(n / 24) * P,
-  }
-}
-
-// ── Bezier path interpolation ─────────────────────────────────────────────────
-
-function bezierAt(
-  t: number,
-  sx: number, sy: number,
-  cpx: number, cpy: number,
-  tx: number, ty: number
-): { x: number; y: number } {
-  const u = 1 - t
-  return {
-    x: u * u * sx + 2 * u * t * cpx + t * t * tx,
-    y: u * u * sy + 2 * u * t * cpy + t * t * ty,
-  }
-}
-
-// ── Shockwave math ────────────────────────────────────────────────────────────
-
-function shockwaveDisplacement(
-  dotX: number, dotY: number,
-  ringX: number, ringY: number,
-  ringR: number, amp: number
-): { dx: number; dy: number } {
-  const ddx = dotX - ringX
-  const ddy = dotY - ringY
-  const di = Math.hypot(ddx, ddy) || 1
-  const k = di - ringR
-  if (Math.abs(k) >= 70) return { dx: 0, dy: 0 }
-  const f = Math.cos((k / 70) * (Math.PI / 2)) * amp
-  return { dx: (ddx / di) * f, dy: (ddy / di) * f }
-}
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Tests
-// ─────────────────────────────────────────────────────────────────────────────
+import {
+  LOW_TIER_SAMPLE_POINTS,
+  MAX_SAMPLE_POINTS,
+  bezierPoint,
+  computeGap,
+  computeGridFromStage,
+  computePrototypeGrid,
+  computeWordFontSize,
+  gridDotPosition,
+  hexToRgb,
+  ringDisplacement,
+} from '@/features/intro/intro-math'
 
 describe('Sampling math', () => {
   it('gap is at least 5 for any font size', () => {
@@ -91,16 +33,23 @@ describe('Sampling math', () => {
   it('fontSize fits word in 70% of width and 50% of height', () => {
     const W = 1200, H = 800
     // Simulate measured word width = 700px at 100px font
-    const fs = computeFontSize(700, W, H)
+    const fs = computeWordFontSize(700, W, H)
     // 70% of 1200 = 840; 840 / 700 * 100 = 120; but clamped to H * 0.5 = 400
     expect(fs).toBeCloseTo(Math.min(120, 400))
   })
 
   it('fontSize is capped to 50% of viewport height', () => {
     const W = 4000, H = 300  // very wide screen
-    const fs = computeFontSize(400, W, H)
+    const fs = computeWordFontSize(400, W, H)
     // H * 0.5 = 150 — the height cap should win
     expect(fs).toBeCloseTo(150)
+  })
+})
+
+describe('hexToRgb', () => {
+  it('parses a 6-digit hex color into an rgb triple', () => {
+    expect(hexToRgb('#9A7BFF')).toEqual([154, 123, 255])
+    expect(hexToRgb('#100C24')).toEqual([16, 12, 36])
   })
 })
 
@@ -145,21 +94,39 @@ describe('Grid geometry from stage rect', () => {
   })
 })
 
+describe('Prototype fallback grid', () => {
+  it('uses the prototype pitch min(W/26, H*0.5/11)', () => {
+    const { P } = computePrototypeGrid(1200, 800)
+    expect(P).toBeCloseTo(Math.min(1200 / 26, (800 * 0.5) / 11))
+  })
+
+  it('grid origin centers an 24x10-ish field at x=50%, y=66%', () => {
+    const { gx0, gy0, P } = computePrototypeGrid(1200, 800)
+    expect(gx0).toBeCloseTo(1200 / 2 - 11.5 * P)
+    expect(gy0).toBeCloseTo(800 * 0.66 - 4.5 * P)
+  })
+
+  it('clamps the dot radius to [3, 6]', () => {
+    expect(computePrototypeGrid(10000, 800).gr).toBeLessThanOrEqual(6)
+    expect(computePrototypeGrid(400, 800).gr).toBeGreaterThanOrEqual(3)
+  })
+})
+
 describe('Bezier path', () => {
   it('starts at the start position when t=0', () => {
-    const { x, y } = bezierAt(0, 10, 20, 50, 60, 100, 200)
+    const { x, y } = bezierPoint(0, 10, 20, 50, 60, 100, 200)
     expect(x).toBeCloseTo(10)
     expect(y).toBeCloseTo(20)
   })
 
   it('ends at the target position when t=1', () => {
-    const { x, y } = bezierAt(1, 10, 20, 50, 60, 100, 200)
+    const { x, y } = bezierPoint(1, 10, 20, 50, 60, 100, 200)
     expect(x).toBeCloseTo(100)
     expect(y).toBeCloseTo(200)
   })
 
   it('is between start and target for t in (0,1)', () => {
-    const { x, y } = bezierAt(0.5, 0, 0, 0, 0, 100, 100)
+    const { x, y } = bezierPoint(0.5, 0, 0, 0, 0, 100, 100)
     expect(x).toBeGreaterThanOrEqual(0)
     expect(x).toBeLessThanOrEqual(100)
     expect(y).toBeGreaterThanOrEqual(0)
@@ -169,7 +136,7 @@ describe('Bezier path', () => {
 
 describe('Shockwave displacement', () => {
   it('returns zero displacement outside the 70px band', () => {
-    const { dx, dy } = shockwaveDisplacement(200, 0, 0, 0, 0, 16)
+    const { dx, dy } = ringDisplacement(200, 0, { x: 0, y: 0, r: 0, amp: 16 })
     // dot is 200px from ring center, ring r=0 → k=200, |k|>70
     expect(dx).toBe(0)
     expect(dy).toBe(0)
@@ -177,7 +144,7 @@ describe('Shockwave displacement', () => {
 
   it('displaces a dot radially outward at maximum at k=0', () => {
     // dot at (100, 0), ring center at (0,0), ring r=100 → k=0
-    const { dx, dy } = shockwaveDisplacement(100, 0, 0, 0, 100, 16)
+    const { dx, dy } = ringDisplacement(100, 0, { x: 0, y: 0, r: 100, amp: 16 })
     // cos(0) = 1 → f = 16; displacement = (100/100) * 16 = 16 in x
     expect(dx).toBeCloseTo(16)
     expect(dy).toBeCloseTo(0)
@@ -185,15 +152,15 @@ describe('Shockwave displacement', () => {
 
   it('displacement falls to zero at the edge of the 70px band', () => {
     // k = 70 → cos(PI/2) = 0
-    const { dx, dy } = shockwaveDisplacement(170, 0, 0, 0, 100, 16)
+    const { dx, dy } = ringDisplacement(170, 0, { x: 0, y: 0, r: 100, amp: 16 })
     expect(Math.abs(dx)).toBeLessThan(0.01)
     expect(Math.abs(dy)).toBeLessThan(0.01)
   })
 
   it('displacement is symmetric on both sides of the ring', () => {
     // k = +35 vs k = -35 should give same magnitude (cos is symmetric)
-    const a = shockwaveDisplacement(135, 0, 0, 0, 100, 16) // k = +35
-    const b = shockwaveDisplacement(65, 0, 0, 0, 100, 16)  // k = -35
+    const a = ringDisplacement(135, 0, { x: 0, y: 0, r: 100, amp: 16 }) // k = +35
+    const b = ringDisplacement(65, 0, { x: 0, y: 0, r: 100, amp: 16 })  // k = -35
     expect(Math.abs(a.dx)).toBeCloseTo(Math.abs(b.dx))
   })
 })
@@ -237,14 +204,9 @@ describe('Session storage flag logic', () => {
 })
 
 describe('Low-tier dot cap', () => {
-  it('caps at 600 for low tier', () => {
-    const maxPts = 600
-    // simulate gap growth until pts.length ≤ maxPts
-    const gap = 5
-    // With 600 allowed pts and gap=5, we stop
-    expect(maxPts).toBe(600)
-    // With high/medium tier
-    expect(2400).toBeGreaterThan(600)
-    void gap // suppress unused var
+  it('Low tier samples 600 points, High/Medium 2,400', () => {
+    expect(LOW_TIER_SAMPLE_POINTS).toBe(600)
+    expect(MAX_SAMPLE_POINTS).toBe(2400)
+    expect(LOW_TIER_SAMPLE_POINTS).toBeLessThan(MAX_SAMPLE_POINTS)
   })
 })

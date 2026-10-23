@@ -1,5 +1,5 @@
 import { notFound } from 'next/navigation'
-import { createScanFixture } from '../../../../tests/fixtures/scan-fixture'
+import { createScanFixture } from '@/lib/demo/scan-fixture'
 import { DevEngineClient } from './client'
 
 export const metadata = {

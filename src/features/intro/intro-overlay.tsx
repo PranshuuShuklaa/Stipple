@@ -20,6 +20,7 @@ import { createTimeline, animate } from 'animejs'
 import type { Timeline, Target } from 'animejs'
 import type { QualityTier } from '@/engine/quality'
 import {
+  LOW_TIER_SAMPLE_POINTS,
   MAX_SAMPLE_POINTS,
   bezierPoint,
   computeGap,
@@ -202,8 +203,9 @@ function buildDots(
 
     if (pick.has(i)) {
       const n = k++
-      gxDot = gx0 + (n % 24) * P
-      gyDot = gy0 + Math.floor(n / 24) * P
+      const grid = gridDotPosition(n, gx0, gy0, P)
+      gxDot = grid.gx
+      gyDot = grid.gy
     } else {
       const an = Math.atan2(ty - H / 2, tx - W / 2)
       ox = Math.cos(an) * rnd(200, 500)
@@ -225,8 +227,6 @@ function buildDots(
 
 // ─── Draw loop ────────────────────────────────────────────────────────────────
 
-interface Ring { x: number; y: number; r: number; amp: number }
-
 function drawFrame(
   ctx: CanvasRenderingContext2D,
   W: number,
@@ -238,9 +238,9 @@ function drawFrame(
 
   for (const d of dots) {
     // Bezier position
-    const u = 1 - d.t
-    let x = u * u * d.sx + 2 * u * d.t * d.cpx + d.t * d.t * d.tx
-    let y = u * u * d.sy + 2 * u * d.t * d.cpy + d.t * d.t * d.ty
+    const base = bezierPoint(d.t, d.sx, d.sy, d.cpx, d.cpy, d.tx, d.ty)
+    let x = base.x
+    let y = base.y
     let r = d.r
     let al = d.a
 
@@ -270,15 +270,9 @@ function drawFrame(
 
     // Shockwave ring displacement
     for (const q of rings) {
-      const dx = x - q.x
-      const dy = y - q.y
-      const di = Math.hypot(dx, dy) || 1
-      const k = di - q.r
-      if (Math.abs(k) < 70) {
-        const f = Math.cos((k / 70) * (Math.PI / 2)) * q.amp
-        x += (dx / di) * f
-        y += (dy / di) * f
-      }
+      const disp = ringDisplacement(x, y, q)
+      x += disp.dx
+      y += disp.dy
     }
 
     const actualR = Math.max(r, 0.1)
@@ -317,6 +311,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
     const overlay = overlayRef.current
     if (!canvas || !overlay) return
 
+    // ── Session check ─────────────────────────────────────────────────────────
+    const forceIntro = new URLSearchParams(window.location.search).get('intro') === '1'
+    if (!forceIntro && sessionStorage.getItem(SESSION_KEY) === '1') {
+      onDone()
+      return
+    }
+
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
 
     // ── Reduced motion: short wordmark fade only ──────────────────────────────
@@ -329,33 +330,48 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
       wm.appendChild(txt)
       document.body.appendChild(wm)
 
-      animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
-      animate(txt, { opacity: [1, 0], duration: 150, ease: 'linear', delay: 150,
+      // Whatever happens, this visit has now seen the intro
+      sessionStorage.setItem(SESSION_KEY, '1')
+
+      const fadeIn = animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
+      const fadeOut = animate(txt, {
+        opacity: [1, 0],
+        duration: 150,
+        ease: 'linear',
+        delay: 150,
         onComplete: () => {
           wm.remove()
           onDone()
-        }
+        },
       })
-      return
-    }
 
-    // ── Session check ─────────────────────────────────────────────────────────
-    const forceIntro = new URLSearchParams(window.location.search).get('intro') === '1'
-    if (!forceIntro && sessionStorage.getItem(SESSION_KEY) === '1') {
-      onDone()
-      return
+      // If the component is unmounted mid-fade: stop both animations and
+      // take the self-created wordmark div with us (no cleanup = leaked node)
+      return () => {
+        fadeIn.pause()
+        fadeOut.pause()
+        wm.remove()
+      }
     }
 
     // ── Canvas setup ──────────────────────────────────────────────────────────
-    const W = window.innerWidth
-    const H = window.innerHeight
-    const dpr = Math.min(window.devicePixelRatio || 1, 2)
-    canvas.width = Math.round(W * dpr)
-    canvas.height = Math.round(H * dpr)
-    canvas.style.width = `${W}px`
-    canvas.style.height = `${H}px`
     const ctx = canvas.getContext('2d')!
-    ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    let W = window.innerWidth
+    let H = window.innerHeight
+    // Arrow const (not a hoisted function declaration): captures the guarded
+    // non-null `canvas` narrowing
+    const setupCanvas = () => {
+      // Re-measures the viewport (called again by a resize replay)
+      W = window.innerWidth
+      H = window.innerHeight
+      const dpr = Math.min(window.devicePixelRatio || 1, 2)
+      canvas.width = Math.round(W * dpr)
+      canvas.height = Math.round(H * dpr)
+      canvas.style.width = `${W}px`
+      canvas.style.height = `${H}px`
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
+    }
+    setupCanvas()
 
     // ── Wait for font then sample ─────────────────────────────────────────────
     let rafId: number
@@ -449,12 +465,16 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
       }
     }
 
-    function startIntro() {
+    function buildTimelineAndDots() {
+      // Start RAF before timeline so the first frame paints immediately
+      // (also restarts the loop after a resize replay)
+      rafId = requestAnimationFrame(loop)
+
       // The engine is the quality-tier authority: Low caps the word sampling
       // at 600 dots (High/Medium use up to 2,400). If the engine has not
       // finished its 60-frame measurement yet it still reports High; the
       // shockwave check re-reads the tier live at 1800 ms.
-      const maxPts = getTier?.()?.name === 'low' ? 600 : 2400
+      const maxPts = getTier?.()?.name === 'low' ? LOW_TIER_SAMPLE_POINTS : MAX_SAMPLE_POINTS
       // Read the demo stage's real rect here (lazy): the intro's effect runs
       // before DotStage's sibling effect, but this runs at least one task
       // later (after the font wait), so the reported element exists by then.
@@ -466,15 +486,14 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
 
       const maxD = Math.hypot(W, H) / 2
 
-      // Hide headline so it can rise in during handoff
+      // Hide headline so it can rise in during handoff (re-done on replay)
       if (headlineRef.current) {
         headlineRef.current.style.opacity = '0'
         headlineRef.current.style.transform = 'translateY(40px)'
       }
 
-      // Start RAF before timeline so first frame paints immediately
-      rafId = requestAnimationFrame(loop)
-      addSkipListeners()
+      // Pause the previous timeline on a resize replay (never double-run)
+      timeline?.pause()
 
       // Build anime.js v4 timeline
       // REFERENCE.md timeline (ms):
@@ -563,6 +582,24 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
         )
       }
 
+      // [handoff end] the last grid dot lands at 2400 + 200 + 650 = 3250 ms.
+      // From here the overlay (dark bg gone, canvas matching the engine
+      // 1:1) stops blocking pointer events, so the page is interactive
+      // during the headline rise. The headline tween keeps running; the
+      // overlay is unmounted by React at timeline end.
+      const release = { _v: 0 }
+      timeline.add(
+        release,
+        {
+          _v: 1,
+          duration: 10,
+          onBegin: () => {
+            overlayRef.current?.style.setProperty('pointer-events', 'none')
+          },
+        },
+        3250
+      )
+
       // Done: clean up and remove overlay
       timeline.then(() => {
         removeSkipListeners()
@@ -576,6 +613,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
       }
     }
 
+    // First start: install the skip listeners once, then build. A resize
+    // replay reuses the still-attached listeners and rebuilds only.
+    function startIntro() {
+      addSkipListeners()
+      buildTimelineAndDots()
+    }
+
     // Wait for font (up to 1200 ms), then start
     Promise.race([
       document.fonts.load(`600 100px ${fontFamily}`),
@@ -583,6 +627,22 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
     ])
       .catch(() => {})
       .then(() => startIntro())
+
+    // Resize: replay instantly like the prototype — cancel the current run,
+    // re-measure the canvas, re-sample and rebuild, debounced 300 ms
+    let resizeTimer: ReturnType<typeof setTimeout> | undefined
+    function handleResize() {
+      if (isDone || !timeline) return
+      window.clearTimeout(resizeTimer)
+      resizeTimer = setTimeout(() => {
+        if (isDone) return
+        cancelAnimationFrame(rafId)
+        rings.length = 0
+        setupCanvas()
+        buildTimelineAndDots()
+      }, 300)
+    }
+    window.addEventListener('resize', handleResize)
 
     // Pause/resume when tab is hidden (REFERENCE.md)
     function handleVisibility() {
@@ -598,24 +658,29 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
 
     return () => {
       cancelAnimationFrame(rafId)
+      window.clearTimeout(resizeTimer)
       timeline?.pause()
       removeSkipListeners()
+      window.removeEventListener('resize', handleResize)
       document.removeEventListener('visibilitychange', handleVisibility)
     }
   }, [stageRef, headlineRef, onDone, getTier])
 
   return (
-    <div ref={overlayRef} className={styles.overlay} aria-hidden="true">
-      {/* Dark background div – faded out during handoff */}
-      <div className={styles.overlayBg} />
-      <canvas ref={canvasRef} className={styles.canvas} />
-      <p ref={skipRef} className={styles.skip}>
-        Click, press any key or scroll to skip.
-      </p>
-      {/* Accessible status for screen readers */}
+    <>
+      <div ref={overlayRef} className={styles.overlay} aria-hidden="true">
+        {/* Dark background div – faded out during handoff */}
+        <div className={styles.overlayBg} />
+        <canvas ref={canvasRef} className={styles.canvas} />
+        <p ref={skipRef} className={styles.skip}>
+          Click, press any key or scroll to skip.
+        </p>
+      </div>
+      {/* Accessible status: outside the aria-hidden overlay, since hidden
+          subtrees are not announced by screen readers */}
       <span className={styles.srOnly} role="status">
         Loading Stipple
       </span>
-    </div>
+    </>
   )
 }

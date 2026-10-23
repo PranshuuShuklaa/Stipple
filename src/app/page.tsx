@@ -5,7 +5,7 @@ import { DotStage } from '@/components/ui/dot-stage'
 import { RepoForm } from '@/features/scan-form/repo-form'
 import { IntroOverlay } from '@/features/intro/intro-overlay'
 import type { DotEngine } from '@/engine/renderer'
-import { createScanFixture } from '../../tests/fixtures/scan-fixture'
+import { createScanFixture } from '@/lib/demo/scan-fixture'
 import styles from './home.module.css'
 
 export default function HomePage() {

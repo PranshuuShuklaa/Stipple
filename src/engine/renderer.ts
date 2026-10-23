@@ -25,6 +25,20 @@ export interface MorphOptions {
   instant?: boolean
 }
 
+/**
+ * Stagger-origin precedence for morphs (REFERENCE.md "After the intro"):
+ * an explicit options.origin wins; otherwise the most recent pointer click
+ * position (canvas-local [x, y]); with no clicks recorded, the canvas center.
+ */
+export function pickMorphOrigin(
+  optionsOrigin: MorphOptions['origin'],
+  lastClick: readonly [number, number] | null
+): NonNullable<MorphOptions['origin']> {
+  if (optionsOrigin !== undefined) return optionsOrigin
+  if (lastClick) return [lastClick[0], lastClick[1]]
+  return 'center'
+}
+
 export interface DotEngineOptions {
   canvas: HTMLCanvasElement
   container?: HTMLElement
@@ -109,6 +123,8 @@ export class DotEngine {
   private shockwave = new ShockwaveEffect()
   private pointerX = -9999
   private pointerY = -9999
+  // Most recent pointerdown position (canvas-local) — default morph origin
+  private lastClick: [number, number] | null = null
 
   // Observers & event listeners
   private resizeObserver: ResizeObserver | null = null
@@ -369,10 +385,14 @@ export class DotEngine {
   }
 
   private handlePointerDown(e: PointerEvent): void {
+    const rect = this.canvas.getBoundingClientRect()
+    const clickX = e.clientX - rect.left
+    const clickY = e.clientY - rect.top
+    // Remember every click so the next morph staggers from it, on any tier
+    this.lastClick = [clickX, clickY]
     // Low tier: no shockwave (DESIGN.md / REFERENCE.md)
     if (this.qualityTier.name === 'low') return
-    const rect = this.canvas.getBoundingClientRect()
-    this.shockwave.trigger(e.clientX - rect.left, e.clientY - rect.top)
+    this.shockwave.trigger(clickX, clickY)
   }
 
   /** External API: fire a shockwave at canvas-local (x, y). Used by the intro overlay. */
@@ -451,7 +471,7 @@ export class DotEngine {
     this.onLayoutChange?.(layout)
 
     const target = this.getLayoutTarget(layout)
-    const origin = options?.origin ?? 'center'
+    const origin = pickMorphOrigin(options?.origin, this.lastClick)
 
     // Capture current in-flight positions before stopping previous animation
     for (let i = 0; i < this.dotCount; i++) {
