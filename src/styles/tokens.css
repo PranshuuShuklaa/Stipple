@@ -1,0 +1,70 @@
+/*
+ * Design tokens — the only place colors live (DESIGN.md).
+ * Light is the base (:root). Dark ships through prefers-color-scheme
+ * and the [data-theme] attribute set by the theme toggle:
+ *   - no data-theme:     follow the system
+ *   - data-theme="dark": manual dark
+ *   - data-theme="light": manual light
+ */
+
+:root {
+  color-scheme: light;
+
+  --bg: #EEEBF8;      /* page */
+  --panel: #DFD9F2;   /* stage and inputs */
+  --fg: #1A1533;      /* text, default dots */
+  --dim: #51496F;     /* secondary text */
+  --line: #C9C1E3;    /* hairlines */
+
+  --c1: #5B2BE0;      /* violet — language 1, primary accent */
+  --c2: #E0246E;      /* pink — language 2 */
+  --c3: #C77700;      /* amber — language 3 */
+  --c4: #0B8F63;      /* green — language 4 */
+  --c5: #0A7FC2;      /* sky — language 5 / other */
+
+  /* focus ring (DESIGN.md) */
+  --focus-color: var(--c1);
+  --focus-width: 2px;
+  --focus-offset: 3px;
+}
+
+/* manual light, so a user can override a dark system */
+:root[data-theme="light"] {
+  color-scheme: light;
+}
+
+/* manual dark */
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --bg: #100C24;
+  --panel: #1A1438;
+  --fg: #F1EEFF;
+  --dim: #A89FCF;
+  --line: #2E2658;
+
+  --c1: #9A7BFF;
+  --c2: #FF5C9A;
+  --c3: #FFB33D;
+  --c4: #3DDC97;
+  --c5: #4CC9FF;
+}
+
+/* system dark, unless the user forced light */
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --bg: #100C24;
+    --panel: #1A1438;
+    --fg: #F1EEFF;
+    --dim: #A89FCF;
+    --line: #2E2658;
+
+    --c1: #9A7BFF;
+    --c2: #FF5C9A;
+    --c3: #FFB33D;
+    --c4: #3DDC97;
+    --c5: #4CC9FF;
+  }
+}

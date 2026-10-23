@@ -1,0 +1,213 @@
+/*
+ * Base styles: reset, fluid type scale, focus ring, layout shell.
+ * Colors come only from tokens.css.
+ */
+
+/* Reset */
+
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html,
+body {
+  min-height: 100%;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  scrollbar-gutter: stable;
+}
+
+body {
+  font-family: var(--font-sans, sans-serif);
+  font-size: clamp(1rem, 0.4vw + 0.86rem, 1.125rem); /* body 16-18 px */
+  line-height: 1.5;
+  background: var(--bg);
+  color: var(--fg);
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+img,
+svg,
+canvas {
+  display: block;
+  max-width: 100%;
+}
+
+input,
+button,
+textarea,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  background: none;
+  border: none;
+  cursor: pointer;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+ul,
+ol {
+  list-style: none;
+}
+
+/* Fluid type scale (DESIGN.md, numbers from REFERENCE.md) */
+
+.heading,
+h1,
+h2,
+h3 {
+  font-weight: 600;
+  line-height: 1;
+  letter-spacing: -0.035em;
+  text-wrap: balance;
+}
+
+/* display / page headline (REFERENCE.md) */
+.type-display {
+  font-size: clamp(44px, 7.6vw, 108px);
+  letter-spacing: -0.045em;
+  line-height: 0.9;
+}
+
+.type-section {
+  font-size: clamp(30px, 4vw, 52px);
+}
+
+.type-step {
+  font-size: clamp(32px, 4.2vw, 56px);
+}
+
+.type-small {
+  font-size: clamp(14px, 0.3vw + 0.8rem, 15px);
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+/* Layout */
+
+.shell {
+  max-width: 1240px;
+  margin-inline: auto;
+  padding-inline: 24px;
+}
+
+/* Focus ring (DESIGN.md: 2 px --c1, 3 px offset) */
+
+:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: var(--focus-offset);
+}
+
+/* Accessibility helpers */
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  padding: 0;
+  margin: -1px;
+  overflow: hidden;
+  clip: rect(0 0 0 0);
+  white-space: nowrap;
+  border: 0;
+}
+
+/* Layout shell: header */
+
+.site-header {
+  padding-block: 20px;
+}
+
+.site-header .shell {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.wordmark {
+  font-weight: 600;
+  font-size: clamp(1.25rem, 1vw + 0.9rem, 1.5rem);
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+/* Theme toggle: show the icon of the theme you would land in (sun in dark) */
+
+.theme-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  border-radius: 999px;
+  border: 1px solid var(--line);
+  color: var(--dim);
+  transition: color var(--dur-fast, 180ms) linear, border-color var(--dur-fast, 180ms) linear;
+}
+
+.theme-toggle:hover {
+  color: var(--fg);
+  border-color: var(--dim);
+}
+
+.theme-toggle svg {
+  width: 18px;
+  height: 18px;
+}
+
+.theme-toggle .icon-sun {
+  display: none;
+}
+
+.theme-toggle .icon-moon {
+  display: block;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-sun {
+  display: none;
+}
+
+:root[data-theme="light"] .theme-toggle .icon-moon {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .icon-sun {
+  display: block;
+}
+
+:root[data-theme="dark"] .theme-toggle .icon-moon {
+  display: none;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .theme-toggle .icon-sun {
+    display: block;
+  }
+
+  :root:not([data-theme="light"]) .theme-toggle .icon-moon {
+    display: none;
+  }
+}
+
+/* Home page */
+
+.home {
+  padding-top: clamp(48px, 9vh, 128px);
+}
