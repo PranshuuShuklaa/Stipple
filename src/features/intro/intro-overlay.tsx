@@ -19,6 +19,18 @@ import { useEffect, useRef } from 'react'
 import { createTimeline, animate } from 'animejs'
 import type { Timeline, Target } from 'animejs'
 import type { QualityTier } from '@/engine/quality'
+import {
+  MAX_SAMPLE_POINTS,
+  bezierPoint,
+  computeGap,
+  computeGridFromStage,
+  computePrototypeGrid,
+  computeWordFontSize,
+  gridDotPosition,
+  hexToRgb,
+  ringDisplacement,
+} from './intro-math'
+import type { Ring } from './intro-math'
 import styles from './intro-overlay.module.css'
 
 const WORD = 'stipple'
@@ -91,8 +103,7 @@ function sample(
 
   // Size the word to 70% of width, max 50% of height
   g.font = `600 100px ${fontFamily}`
-  const measure = g.measureText(WORD).width
-  const fs = Math.min((100 * (W * 0.7)) / measure, H * 0.5)
+  const fs = computeWordFontSize(g.measureText(WORD).width, W, H)
   g.font = `600 ${fs}px ${fontFamily}`
   g.textBaseline = 'middle'
   g.fillStyle = '#fff'
@@ -109,7 +120,7 @@ function sample(
   g.fillText(WORD, x0, H / 2)
 
   const px = g.getImageData(0, 0, W, H).data
-  let gap = Math.max(5, Math.round(fs / 42))
+  let gap = computeGap(fs)
   let pts: [number, number, number][]
 
   for (;;) {
@@ -135,14 +146,6 @@ function rnd(lo: number, hi: number): number {
   return lo + Math.random() * (hi - lo)
 }
 
-function hexToRgb(hex: string): [number, number, number] {
-  return [
-    parseInt(hex.slice(1, 3), 16),
-    parseInt(hex.slice(3, 5), 16),
-    parseInt(hex.slice(5, 7), 16),
-  ]
-}
-
 /**
  * The engine renders Files dots in the page's current-theme fg color
  * (tokens.css → --fg → body color), so the handoff target is body.color.
@@ -164,27 +167,9 @@ function buildDots(
   filesColor: [number, number, number]
 ): IntroDot[] {
   // Compute grid destination from real stage rect (REFERENCE.md — zero-jump)
-  let gx0: number, gy0: number, P: number, gridRadius: number
-
-  if (stageRect) {
-    const sW = stageRect.width
-    const sH = stageRect.height
-    P = Math.min(sW / 25, sH / 13)
-    const baseS = Math.max(6, Math.min(12, Math.round(sW / 90)))
-    const s = Math.min(baseS, Math.max(4, 0.8 * P))
-    gridRadius = s / 2
-    // cx/cy of the stage in viewport coords
-    const sCx = stageRect.left + sW / 2
-    const sCy = stageRect.top + sH / 2 - 8
-    gx0 = sCx - 11.5 * P
-    gy0 = sCy - 4.5 * P
-  } else {
-    // Fallback: prototype position (H * 0.66)
-    P = Math.min(W / 26, H * 0.5 / 11)
-    gridRadius = Math.max(3, Math.min(6, W / 180))
-    gx0 = W / 2 - 11.5 * P
-    gy0 = H * 0.66 - 4.5 * P
-  }
+  const { P, gx0, gy0, gr: gridRadius } = stageRect
+    ? computeGridFromStage(stageRect.width, stageRect.height, stageRect.left, stageRect.top)
+    : computePrototypeGrid(W, H)
 
   const dotR = gap * 0.36
 

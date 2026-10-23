@@ -8,8 +8,8 @@
   position: fixed;
   inset: 0;
   z-index: 1000;
-  /* Always dark panel – the intro uses the dark palette regardless of theme */
-  background: #100c24;
+  /* Always dark panel (token) – the intro uses the dark palette regardless of theme */
+  background: var(--intro-bg);
   overflow: hidden;
   /* isolate so mix-blend-mode / opacity on children don't bleed */
   isolation: isolate;
@@ -19,7 +19,7 @@
 .overlayBg {
   position: absolute;
   inset: 0;
-  background: #100c24;
+  background: var(--intro-bg);
   opacity: var(--intro-bg-opacity, 1);
   pointer-events: none;
   /* No transition here – JS drives the opacity directly for precise sync */
@@ -40,7 +40,7 @@
   bottom: 16px;
   translate: -50% 0;
   margin: 0;
-  color: #a89fcf;
+  color: var(--intro-dim);
   font-size: 14px;
   pointer-events: none;
   transition: opacity 200ms linear;

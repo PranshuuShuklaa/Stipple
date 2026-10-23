@@ -26,6 +26,12 @@
   --focus-color: var(--c1);
   --focus-width: 2px;
   --focus-offset: 3px;
+
+  /* Intro constants (REFERENCE.md Decisions): the boot intro always shows
+   * the dark panel and dark-theme dim text, in both themes. Declared once,
+   * never overridden by theme blocks. */
+  --intro-bg: #100C24;
+  --intro-dim: #A89FCF;
 }
 
 /* manual light, so a user can override a dark system */
