@@ -73,3 +73,16 @@
   margin-right: 7px;
   flex-shrink: 0;
 }
+
+.devOverlay {
+  position: absolute;
+  right: 20px;
+  top: 16px;
+  margin: 0;
+  color: var(--dim);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 1.4;
+  font-variant-numeric: tabular-nums;
+  pointer-events: none;
+}

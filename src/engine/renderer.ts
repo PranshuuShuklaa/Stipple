@@ -7,6 +7,14 @@ import { calculateActivityLayout } from './layouts/activity'
 import { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
 import { resolveThemeColors } from './colors'
 import { SpatialGrid } from './spatial-grid'
+import {
+  QUALITY_TIERS,
+  TierController,
+  FpsMeter,
+  type QualityTier,
+  type QualityTierName,
+} from './quality'
+import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 
 export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
 
@@ -24,6 +32,7 @@ export interface DotEngineOptions {
   onHoverChange?: (fileIndex: number | null) => void
   onLabelsChange?: (labels: FolderLabel[] | null) => void
   onLayoutChange?: (layout: LayoutName) => void
+  onTierChange?: (tier: QualityTier) => void
 }
 
 interface DotProgressTarget {
@@ -38,43 +47,52 @@ export class DotEngine {
   private canvas: HTMLCanvasElement
   private ctx: CanvasRenderingContext2D
   private container: HTMLElement
+  private rawScan: Scan
   private scan: Scan
   private theme: ThemeColors
+
+  private dotField!: DotField
+
+  private quality: TierController
+  private qualityTier: QualityTier
+  private fpsMeter = new FpsMeter()
+  private lastMeasuredFps: number | null = null
+  private evaluateNextSample = true
 
   private width = 0
   private height = 0
   private dpr = 1
 
-  private dotCount: number
+  private dotCount = 0
 
-  // Typed arrays for dot properties
-  private x: Float32Array
-  private y: Float32Array
-  private startX: Float32Array
-  private startY: Float32Array
-  private targetX: Float32Array
-  private targetY: Float32Array
+  // Typed arrays for dot properties (allocated in allocateDots)
+  private x = new Float32Array(0)
+  private y = new Float32Array(0)
+  private startX = new Float32Array(0)
+  private startY = new Float32Array(0)
+  private targetX = new Float32Array(0)
+  private targetY = new Float32Array(0)
 
-  private size: Float32Array
-  private startSize: Float32Array
-  private targetSize: Float32Array
+  private size = new Float32Array(0)
+  private startSize = new Float32Array(0)
+  private targetSize = new Float32Array(0)
 
-  private alpha: Float32Array
-  private startAlpha: Float32Array
-  private targetAlpha: Float32Array
+  private alpha = new Float32Array(0)
+  private startAlpha = new Float32Array(0)
+  private targetAlpha = new Float32Array(0)
 
-  private r: Uint8ClampedArray
-  private g: Uint8ClampedArray
-  private b: Uint8ClampedArray
-  private startR: Uint8ClampedArray
-  private startG: Uint8ClampedArray
-  private startB: Uint8ClampedArray
-  private targetR: Uint8ClampedArray
-  private targetG: Uint8ClampedArray
-  private targetB: Uint8ClampedArray
+  private r = new Uint8ClampedArray(0)
+  private g = new Uint8ClampedArray(0)
+  private b = new Uint8ClampedArray(0)
+  private startR = new Uint8ClampedArray(0)
+  private startG = new Uint8ClampedArray(0)
+  private startB = new Uint8ClampedArray(0)
+  private targetR = new Uint8ClampedArray(0)
+  private targetG = new Uint8ClampedArray(0)
+  private targetB = new Uint8ClampedArray(0)
 
   // Animation drivers
-  private progressTargets: DotProgressTarget[]
+  private progressTargets: DotProgressTarget[] = []
   private currentAnimation: ReturnType<typeof animate> | null = null
 
   // Lifecycle & loop state
@@ -87,9 +105,11 @@ export class DotEngine {
   // Observers & event listeners
   private resizeObserver: ResizeObserver | null = null
   private intersectionObserver: IntersectionObserver | null = null
+  private reducedMotionQuery: MediaQueryList | null = null
   private boundVisibilityChange: () => void
   private boundPointerMove: (e: PointerEvent) => void
   private boundPointerLeave: () => void
+  private boundReducedMotionChange: (() => void) | null = null
 
   // Spatial grid for O(1) hover queries
   private spatialGrid = new SpatialGrid(36)
@@ -99,6 +119,7 @@ export class DotEngine {
   private onHoverChange?: (fileIndex: number | null) => void
   private onLabelsChange?: (labels: FolderLabel[] | null) => void
   private onLayoutChange?: (layout: LayoutName) => void
+  private onTierChange?: (tier: QualityTier) => void
 
   // Current layout cache
   private currentLayout: LayoutName = 'files'
@@ -111,46 +132,25 @@ export class DotEngine {
     }
     this.ctx = context
     this.container = options.container ?? this.canvas.parentElement ?? this.canvas
-    this.scan = options.scan
+    this.rawScan = options.scan
+    this.scan = this.rawScan
     this.theme = options.theme ?? resolveThemeColors(this.container)
     this.onHoverChange = options.onHoverChange
     this.onLabelsChange = options.onLabelsChange
     this.onLayoutChange = options.onLayoutChange
+    this.onTierChange = options.onTierChange
 
-    this.dotCount = this.scan.files.length
-
-    // Initialize typed arrays
-    const n = this.dotCount
-    this.x = new Float32Array(n)
-    this.y = new Float32Array(n)
-    this.startX = new Float32Array(n)
-    this.startY = new Float32Array(n)
-    this.targetX = new Float32Array(n)
-    this.targetY = new Float32Array(n)
-
-    this.size = new Float32Array(n)
-    this.startSize = new Float32Array(n)
-    this.targetSize = new Float32Array(n)
-
-    this.alpha = new Float32Array(n)
-    this.startAlpha = new Float32Array(n)
-    this.targetAlpha = new Float32Array(n)
-
-    this.r = new Uint8ClampedArray(n)
-    this.g = new Uint8ClampedArray(n)
-    this.b = new Uint8ClampedArray(n)
-    this.startR = new Uint8ClampedArray(n)
-    this.startG = new Uint8ClampedArray(n)
-    this.startB = new Uint8ClampedArray(n)
-    this.targetR = new Uint8ClampedArray(n)
-    this.targetG = new Uint8ClampedArray(n)
-    this.targetB = new Uint8ClampedArray(n)
-
-    this.progressTargets = Array.from({ length: n }, () => ({ p: 1 }))
+    // Reduced motion forces the Low tier from the start (DESIGN.md)
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.quality = new TierController(reducedMotion)
+    this.qualityTier = QUALITY_TIERS[this.quality.getTier()]
 
     // Setup viewport & start state (center, scale 0, opacity 0)
     this.updateDimensions()
-    this.initStartState()
+    this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
 
     // Setup observers and listeners
     this.boundVisibilityChange = this.handleVisibilityChange.bind(this)
@@ -187,6 +187,55 @@ export class DotEngine {
 
     this.ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0)
     return true
+  }
+
+  /**
+   * Rebuilds the dot field for a dot-count cap. Above 2,500 files a dot
+   * stands for N files (weighted by size); tiers cap at 600/1500/3000.
+   */
+  private allocateDots(maxDots: number): void {
+    if (this.currentAnimation) {
+      this.currentAnimation.pause()
+      this.currentAnimation = null
+    }
+
+    const field = buildDotField(this.rawScan, maxDots)
+    this.scan = field.scan
+    this.dotField = field
+    this.dotCount = field.dotCount
+
+    const n = this.dotCount
+    this.x = new Float32Array(n)
+    this.y = new Float32Array(n)
+    this.startX = new Float32Array(n)
+    this.startY = new Float32Array(n)
+    this.targetX = new Float32Array(n)
+    this.targetY = new Float32Array(n)
+
+    this.size = new Float32Array(n)
+    this.startSize = new Float32Array(n)
+    this.targetSize = new Float32Array(n)
+
+    this.alpha = new Float32Array(n)
+    this.startAlpha = new Float32Array(n)
+    this.targetAlpha = new Float32Array(n)
+
+    this.r = new Uint8ClampedArray(n)
+    this.g = new Uint8ClampedArray(n)
+    this.b = new Uint8ClampedArray(n)
+    this.startR = new Uint8ClampedArray(n)
+    this.startG = new Uint8ClampedArray(n)
+    this.startB = new Uint8ClampedArray(n)
+    this.targetR = new Uint8ClampedArray(n)
+    this.targetG = new Uint8ClampedArray(n)
+    this.targetB = new Uint8ClampedArray(n)
+
+    this.progressTargets = Array.from({ length: n }, () => ({ p: 1 }))
+
+    this.hoveredIndex = -1
+    this.onHoverChange?.(null)
+
+    this.initStartState()
   }
 
   private initStartState(): void {
@@ -258,6 +307,20 @@ export class DotEngine {
     // Visibility change listener
     document.addEventListener('visibilitychange', this.boundVisibilityChange)
     this.isPageVisible = !document.hidden
+
+    // Reduced-motion preference: forces the Low tier immediately
+    if (typeof window.matchMedia === 'function') {
+      this.reducedMotionQuery = window.matchMedia('(prefers-reduced-motion: reduce)')
+      this.boundReducedMotionChange = this.handleReducedMotionChange.bind(this)
+      this.reducedMotionQuery.addEventListener('change', this.boundReducedMotionChange)
+    }
+  }
+
+  private handleReducedMotionChange(): void {
+    if (this.isDestroyed || !this.reducedMotionQuery) return
+    this.quality.setReducedMotion(this.reducedMotionQuery.matches)
+    // Accessibility change: reduced motion may bypass the cooldown to reach Low
+    this.evaluateQuality(performance.now(), this.reducedMotionQuery.matches)
   }
 
   private setupPointerListeners(): void {
@@ -310,6 +373,10 @@ export class DotEngine {
   }
 
   private handleResize(): void {
+    // Re-measure over the next 60 frames after a resize (DESIGN.md)
+    this.fpsMeter.reset()
+    this.evaluateNextSample = true
+
     const target = this.getLayoutTarget(this.currentLayout)
     for (let i = 0; i < this.dotCount; i++) {
       this.targetX[i] = target.x[i]
@@ -469,8 +536,39 @@ export class DotEngine {
   private loop(): void {
     if (!this.isRunning || this.isDestroyed) return
 
+    const timestamp = performance.now()
+    const sample = this.fpsMeter.record(timestamp)
+    if (sample !== null) {
+      this.lastMeasuredFps = sample
+      if (this.evaluateNextSample) {
+        this.evaluateNextSample = false
+        this.evaluateQuality(timestamp)
+      }
+    }
+
     this.render()
     this.rafId = requestAnimationFrame(this.loop.bind(this))
+  }
+
+  /**
+   * Measures the first 60 frames and picks the tier (High 55+, Medium 45-55,
+   * Low under 45 or reduced motion). Switches at most once every 5 seconds.
+   */
+  private evaluateQuality(nowMs: number, forceLow = false): void {
+    const result = this.quality.evaluate(this.lastMeasuredFps, nowMs, { forceLow })
+    if (result.changed) {
+      this.applyTier(result.tier)
+    }
+  }
+
+  private applyTier(tier: QualityTierName): void {
+    this.qualityTier = QUALITY_TIERS[tier]
+    this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
+    this.onTierChange?.(this.qualityTier)
+    this.morphTo(this.currentLayout)
+    // Re-measure after the rebuild so the tier decision is based on the new load
+    this.fpsMeter.reset()
+    this.evaluateNextSample = true
   }
 
   public render(): void {
@@ -573,10 +671,39 @@ export class DotEngine {
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.boundVisibilityChange)
     }
+
+    if (this.reducedMotionQuery && this.boundReducedMotionChange) {
+      this.reducedMotionQuery.removeEventListener('change', this.boundReducedMotionChange)
+      this.reducedMotionQuery = null
+    }
   }
 
   public getCurrentLayout(): LayoutName {
     return this.currentLayout
+  }
+
+  public getQualityTier(): QualityTier {
+    return this.qualityTier
+  }
+
+  public getFps(): number | null {
+    return this.lastMeasuredFps
+  }
+
+  public getStats(): {
+    fps: number | null
+    tier: QualityTier
+    dotCount: number
+    totalFiles: number
+    filesPerDot: number
+  } {
+    return {
+      fps: this.lastMeasuredFps,
+      tier: this.qualityTier,
+      dotCount: this.dotCount,
+      totalFiles: this.dotField.totalFiles,
+      filesPerDot: this.dotField.filesPerDot,
+    }
   }
 
   public getDotCount(): number {

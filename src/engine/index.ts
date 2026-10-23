@@ -1,4 +1,16 @@
 export { DotEngine, type DotEngineOptions, type MorphOptions, type LayoutName } from './renderer'
+export {
+  QUALITY_TIERS,
+  QUALITY_CONFIG,
+  pickTier,
+  FpsMeter,
+  TierController,
+  type QualityTierName,
+  type QualityTier,
+  type QualityEffects,
+  type TierEvaluation,
+} from './quality'
+export { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 export { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewport } from './layouts/files'
 export { calculateLanguagesLayout } from './layouts/languages'
 export { calculateActivityLayout } from './layouts/activity'

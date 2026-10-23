@@ -1,9 +1,10 @@
 'use client'
 
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo } from 'react'
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback } from 'react'
 import { animate, stagger } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
+import type { QualityTier } from '@/engine/quality'
 import type { FolderLabel } from '@/engine/layouts/folders'
 import styles from './dot-stage.module.css'
 
@@ -39,6 +40,20 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
   const [currentLayout, setCurrentLayout] = useState<LayoutName>(initialLayout)
   const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
   const [folderLabels, setFolderLabels] = useState<FolderLabel[] | null>(null)
+  const [stats, setStats] = useState<{
+    fps: number | null
+    tier: QualityTier | null
+    dotCount: number
+    totalFiles: number
+    filesPerDot: number
+  } | null>(null)
+  const isDev = process.env.NODE_ENV !== 'production'
+
+  const readEngineStats = useCallback(() => {
+    const engine = engineRef.current
+    if (!engine) return
+    setStats(engine.getStats())
+  }, [])
 
   useImperativeHandle(
     ref,
@@ -92,8 +107,12 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         setCurrentLayout(layout)
         onLayoutChange?.(layout)
       },
+      onTierChange: () => {
+        readEngineStats()
+      },
     })
     engineRef.current = engine
+    readEngineStats()
 
     // Watch for theme changes on <html>
     const observer = new MutationObserver((mutations) => {
@@ -117,7 +136,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       engine.destroy()
       engineRef.current = null
     }
-  }, [scan, initialLayout, onLayoutChange])
+  }, [scan, initialLayout, onLayoutChange, readEngineStats])
+
+  // Dev-only stats polling for the overlay; tier changes broadcast via onTierChange
+  useEffect(() => {
+    if (!isDev) return
+    const interval = window.setInterval(readEngineStats, 500)
+    return () => window.clearInterval(interval)
+  }, [isDev, readEngineStats])
 
   // Animate folder labels on entry
   useEffect(() => {
@@ -161,6 +187,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         aria-label={ariaLabel}
       />
 
+      {/* Dev-only quality overlay (fps, tier, dot count) */}
+      {isDev && stats && (
+        <p className={styles.devOverlay} aria-hidden="true">
+          {stats.fps !== null ? `${Math.round(stats.fps)} fps` : 'measuring…'} · tier{' '}
+          {stats.tier ? stats.tier.label : '—'} · {stats.dotCount} dots
+        </p>
+      )}
+
       {/* Folders layout labels */}
       <div ref={labelsRef} className={styles.labels} aria-hidden="true">
         {folderLabels?.map((l) => (
@@ -185,7 +219,10 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       {/* Legend bottom left */}
       <div className={styles.legend} aria-hidden="true">
         {currentLayout === 'files' && (
-          <span>{scan.files.length} files</span>
+          <span>
+            {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length} files
+            {stats && stats.filesPerDot > 1 ? ` · one dot = ${stats.filesPerDot} files` : ''}
+          </span>
         )}
 
         {currentLayout === 'languages' && (
