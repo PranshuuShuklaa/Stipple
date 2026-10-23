@@ -1,0 +1,40 @@
+/* Report page shell: headline block, story, sections. Colors only from
+ * tokens.css; layout numbers per REFERENCE.md. */
+
+.wrap {
+  padding-bottom: 0;
+}
+
+.head {
+  margin: 40px 0 40px;
+}
+
+.title {
+  margin: 0 0 12px;
+}
+
+.meta {
+  color: var(--dim);
+  margin: 0 0 14px;
+}
+
+.description {
+  max-width: 60ch;
+  font-size: 18px;
+  line-height: 1.4;
+  color: var(--dim);
+  margin: 0 0 10px;
+}
+
+.truncated {
+  max-width: 60ch;
+  font-size: 15px;
+  line-height: 1.4;
+  color: var(--dim);
+  margin: 0;
+}
+
+.pending {
+  padding-block: 80px 120px;
+  color: var(--dim);
+}

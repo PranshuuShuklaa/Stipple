@@ -12,7 +12,9 @@ import { calculateActivityLayout } from '@/engine/layouts/activity'
 import { calculateFoldersLayout, FOLDER_CENTERS } from '@/engine/layouts/folders'
 import { SpatialGrid } from '@/engine/spatial-grid'
 import { parseColor } from '@/engine/colors'
-import { pickMorphOrigin, type MorphOptions } from '@/engine/renderer'
+import { pickMorphOrigin, pixelOriginToFraction, type MorphOptions } from '@/engine/renderer'
+import { createLanguageIndexer } from '@/engine/layouts/language-colors'
+import type { Scan } from '@/lib/types/scan'
 
 const theme = {
   fg: [26, 21, 51] as [number, number, number],
@@ -73,16 +75,54 @@ describe('Files Layout Math', () => {
     expect(smallLayout.size[0]).toBeGreaterThanOrEqual(4)
   })
 
-  it('applies opacity 0.85 and fg color to all dots in Files layout', () => {
+  it('applies opacity 0.85 and language-coded colors in Files layout', () => {
     const scan = createScanFixture('stipple/stipple')
     const layout = calculateFilesLayout(scan, { width: 960, height: 540 }, theme)
 
+    const palette = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5, theme.fg]
+    const seen = new Set<string>()
+
     for (let i = 0; i < layout.dotCount; i++) {
       expect(layout.alpha[i]).toBeCloseTo(0.85)
-      expect(layout.r[i]).toBe(theme.fg[0])
-      expect(layout.g[i]).toBe(theme.fg[1])
-      expect(layout.b[i]).toBe(theme.fg[2])
+      const match = palette.findIndex(
+        ([cr, cg, cb]) => layout.r[i] === cr && layout.g[i] === cg && layout.b[i] === cb
+      )
+      expect(match).toBeGreaterThanOrEqual(0)
+      expect(match).toBeLessThanOrEqual(4) // fg must not appear while languages are counted
+      seen.add(String(match))
     }
+
+    // A 5-language fixture renders at least two distinct language colors
+    expect(seen.size).toBeGreaterThanOrEqual(2)
+  })
+
+  it('maps each dot color through the shared language indexer (grid slot k = file k)', () => {
+    const scan = createScanFixture('stipple/stipple')
+    const layout = calculateFilesLayout(scan, { width: 960, height: 540 }, theme)
+    const languageIndexFor = createLanguageIndexer(scan)
+    const palette = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
+
+    for (let i = 0; i < layout.dotCount; i++) {
+      const [cr, cg, cb] = palette[languageIndexFor(scan.files[i]?.language)]
+      expect(layout.r[i]).toBe(cr)
+      expect(layout.g[i]).toBe(cg)
+      expect(layout.b[i]).toBe(cb)
+    }
+  })
+
+  it('keeps fg dots when the scan counts no languages (tiny data)', () => {
+    const scan = createScanFixture('octocat/Hello-World')
+    const tiny: Scan = {
+      ...scan,
+      files: [{ path: 'README', name: 'README', size: 10, language: null, folder: '' }],
+      languages: [],
+    }
+    const layout = calculateFilesLayout(tiny, { width: 960, height: 540 }, theme)
+
+    expect(layout.dotCount).toBe(1)
+    expect(layout.r[0]).toBe(theme.fg[0])
+    expect(layout.g[0]).toBe(theme.fg[1])
+    expect(layout.b[0]).toBe(theme.fg[2])
   })
 
   it('has valid coordinates with no NaN and within bounds', () => {
@@ -297,5 +337,25 @@ describe('pickMorphOrigin', () => {
   it('uses plain origin unions as-is', () => {
     const opts: MorphOptions['origin'] = 'last'
     expect(pickMorphOrigin(opts, null)).toBe('last')
+  })
+})
+
+describe('pixelOriginToFraction', () => {
+  it('scales canvas pixels to 0..1 grid fractions', () => {
+    expect(pixelOriginToFraction([200, 150], 800, 600)).toEqual([0.25, 0.25])
+    expect(pixelOriginToFraction([400, 300], 800, 600)).toEqual([0.5, 0.5])
+
+    const [fx, fy] = pixelOriginToFraction([799, 599], 800, 600)
+    expect(fx).toBeCloseTo(799 / 800)
+    expect(fy).toBeCloseTo(599 / 600)
+  })
+
+  it('clamps out-of-bounds click points', () => {
+    expect(pixelOriginToFraction([-20, 900], 800, 600)).toEqual([0, 1])
+    expect(pixelOriginToFraction([1200, -5], 800, 600)).toEqual([1, 0])
+  })
+
+  it('centers on degenerate sizes', () => {
+    expect(pixelOriginToFraction([100, 100], 0, 0)).toEqual([0.5, 0.5])
   })
 })

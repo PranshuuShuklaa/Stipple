@@ -1,5 +1,6 @@
 import type { Scan } from '@/lib/types/scan'
 import type { LayoutTarget, ThemeColors, Viewport } from './files'
+import { createLanguageIndexer } from './language-colors'
 
 /**
  * Calculates dot positions and properties for the Languages stacked bar layout.
@@ -30,27 +31,12 @@ export function calculateLanguagesLayout(
   const s = Math.min(baseS, Math.max(4, 0.8 * Pb))
   const halfS = s / 2
 
-  // Map scan.languages to indices 0..4 (c1..c5)
-  const langColorMap = new Map<string, number>()
-  for (let i = 0; i < scan.languages.length; i++) {
-    const idx = Math.min(i, 4)
-    langColorMap.set(scan.languages[i].name.toLowerCase(), idx)
-  }
-
-  // Determine language index for each file (default to 4 for other/unmatched)
-  const fileLangIndices = new Int32Array(n)
-  for (let i = 0; i < n; i++) {
-    const lang = scan.files[i]?.language
-    if (lang && langColorMap.has(lang.toLowerCase())) {
-      fileLangIndices[i] = langColorMap.get(lang.toLowerCase())!
-    } else {
-      fileLangIndices[i] = 4
-    }
-  }
+  // Language → color index shared with the Files layout (same rule, same colors)
+  const languageIndexFor = createLanguageIndexer(scan)
 
   // Stable sort files by language index, tie-breaking by file index
   const indices = Array.from({ length: n }, (_, i) => i)
-  indices.sort((a, b) => fileLangIndices[a] - fileLangIndices[b] || a - b)
+  indices.sort((a, b) => languageIndexFor(scan.files[a]?.language) - languageIndexFor(scan.files[b]?.language) || a - b)
 
   const ranks = new Int32Array(n)
   for (let r = 0; r < n; r++) {
@@ -80,7 +66,7 @@ export function calculateLanguagesLayout(
     size[i] = s
     alpha[i] = 1.0
 
-    const langIdx = fileLangIndices[i]
+    const langIdx = languageIndexFor(scan.files[i]?.language)
     const [cr, cg, cb] = themeColors[langIdx] ?? theme.c5
     rArr[i] = cr
     gArr[i] = cg

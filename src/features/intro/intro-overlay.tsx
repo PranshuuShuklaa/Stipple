@@ -19,6 +19,9 @@ import { useEffect, useRef } from 'react'
 import { createTimeline, animate } from 'animejs'
 import type { Timeline, Target } from 'animejs'
 import type { QualityTier } from '@/engine/quality'
+import { resolveThemeColors } from '@/engine/colors'
+import { createLanguageIndexer } from '@/engine/layouts/language-colors'
+import type { Scan } from '@/lib/types/scan'
 import {
   LOW_TIER_SAMPLE_POINTS,
   MAX_SAMPLE_POINTS,
@@ -148,8 +151,10 @@ function rnd(lo: number, hi: number): number {
 }
 
 /**
- * The engine renders Files dots in the page's current-theme fg color
- * (tokens.css → --fg → body color), so the handoff target is body.color.
+ * Fallback handoff color: the page's current-theme fg (tokens.css → --fg →
+ * body color). Used for grid dots only when the intro has no scan or the
+ * scan counts no languages; otherwise the engine's Files look is
+ * language-coded (one dot = one file's language).
  */
 function resolveFilesColor(): [number, number, number] {
   const m = getComputedStyle(document.body).color
@@ -165,7 +170,7 @@ function buildDots(
   W: number,
   H: number,
   stageRect: DOMRect | null,
-  filesColor: [number, number, number]
+  filesColorForSlot: (slot: number) => [number, number, number]
 ): IntroDot[] {
   // Compute grid destination from real stage rect (REFERENCE.md — zero-jump)
   const { P, gx0, gy0, gr: gridRadius } = stageRect
@@ -200,10 +205,11 @@ function buildDots(
     let gyDot: number | null = null
     const gr = gridRadius
     let ox = 0, oy = 0
+    let slot = -1
 
     if (pick.has(i)) {
-      const n = k++
-      const grid = gridDotPosition(n, gx0, gy0, P)
+      slot = k++
+      const grid = gridDotPosition(slot, gx0, gy0, P)
       gxDot = grid.gx
       gyDot = grid.gy
     } else {
@@ -217,7 +223,7 @@ function buildDots(
       t: 0, a: 0, h: 0,
       col,
       // Grid dots fade into the engine Files color; scatter dots ignore it
-      fileColor: gxDot !== null ? filesColor : col,
+      fileColor: gxDot !== null ? filesColorForSlot(slot) : col,
       r: dotR,
       gx: gxDot, gy: gyDot, gr,
       ox, oy,
@@ -299,12 +305,17 @@ interface IntroOverlayProps {
   onDone: () => void
   /** reads the mounted DotEngine's current quality tier (Low = 600 dots, no shockwave) */
   getTier?: () => QualityTier | null
+  /** the home demo scan; grid slot k = file k's language color during handoff */
+  scan?: Scan | null
 }
 
-export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOverlayProps) {
+export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: IntroOverlayProps) {
   const overlayRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const skipRef = useRef<HTMLParagraphElement>(null)
+  // The intro runs once per mount for the scan it first saw (the home demo
+  // scan); later prop changes must not re-trigger the boot animation.
+  const scanRef = useRef<Scan | null>(scan)
 
   useEffect(() => {
     const canvas = canvasRef.current
@@ -482,7 +493,22 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier }: IntroOv
       const stageRect = stageRef.current?.getBoundingClientRect() ?? null
       const { pts, gap } = sample(W, H, maxPts, fontFamily)
       const filesColor = resolveFilesColor()
-      dots = buildDots(pts, gap, W, H, stageRect, filesColor)
+      // Grid slot k hands off onto engine dot k = file k's dot, so the
+      // handoff target color is that file's language color (language-coded
+      // Files view). Without a scan or without counted languages, every
+      // slot fades into fg. Tokens are read from :root the same way the
+      // engine reads them.
+      const theme = resolveThemeColors(document.documentElement)
+      const palette = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
+      const languageIndexFor = scanRef.current ? createLanguageIndexer(scanRef.current) : null
+      const fileColorForSlot = (slot: number): [number, number, number] => {
+        const introScan = scanRef.current
+        if (languageIndexFor && introScan && introScan.languages.length > 0) {
+          return palette[languageIndexFor(introScan.files[slot]?.language)] ?? filesColor
+        }
+        return filesColor
+      }
+      dots = buildDots(pts, gap, W, H, stageRect, fileColorForSlot)
 
       const maxD = Math.hypot(W, H) / 2
 

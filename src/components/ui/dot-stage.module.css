@@ -1,7 +1,7 @@
 .stage {
   position: relative;
   width: 100%;
-  height: min(72vh, 580px);
+  height: var(--stage-h, min(72vh, 580px));
   min-height: 320px;
   background-color: var(--panel);
   border-radius: 24px;

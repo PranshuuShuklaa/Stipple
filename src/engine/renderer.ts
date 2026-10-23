@@ -39,6 +39,26 @@ export function pickMorphOrigin(
   return 'center'
 }
 
+function clamp01(value: number): number {
+  return Math.min(1, Math.max(0, value))
+}
+
+/**
+ * anime.js v4's grid stagger treats a `[x, y]` `from` as FRACTIONS of the
+ * grid (utils/stagger.js: `from[0] * (grid[0] - 1)`), not as pixels. Click
+ * origins are recorded in canvas pixels, so they ship here normalized to
+ * 0..1 on both axes before reaching stagger — otherwise one click adds
+ * enormous per-dot delays and every later morph looks frozen.
+ */
+export function pixelOriginToFraction(
+  origin: readonly [number, number],
+  width: number,
+  height: number,
+): [number, number] {
+  if (width <= 0 || height <= 0) return [0.5, 0.5]
+  return [clamp01(origin[0] / width), clamp01(origin[1] / height)]
+}
+
 export interface DotEngineOptions {
   canvas: HTMLCanvasElement
   container?: HTMLElement
@@ -471,7 +491,9 @@ export class DotEngine {
     this.onLayoutChange?.(layout)
 
     const target = this.getLayoutTarget(layout)
-    const origin = pickMorphOrigin(options?.origin, this.lastClick)
+    const picked = pickMorphOrigin(options?.origin, this.lastClick)
+    // Grid stagger `from: [x, y]` expects grid fractions, not canvas pixels.
+    const origin = Array.isArray(picked) ? pixelOriginToFraction(picked, this.width, this.height) : picked
 
     // Capture current in-flight positions before stopping previous animation
     for (let i = 0; i < this.dotCount; i++) {
@@ -619,6 +641,13 @@ export class DotEngine {
 
   private applyTier(tier: QualityTierName): void {
     this.qualityTier = QUALITY_TIERS[tier]
+    // Same density as the current field: keep every typed array and any
+    // in-flight morph — only pointers/effects and the tier stat change.
+    // Rebuilding during a scroll would reset the whole field visually.
+    if (this.dotCount === Math.min(this.rawScan.files.length, QUALITY_TIERS[tier].maxDots, HARD_DOT_CAP)) {
+      this.onTierChange?.(this.qualityTier)
+      return
+    }
     this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
     this.onTierChange?.(this.qualityTier)
     this.morphTo(this.currentLayout)

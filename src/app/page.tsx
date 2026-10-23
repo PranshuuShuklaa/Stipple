@@ -45,6 +45,7 @@ export default function HomePage() {
           headlineRef={headlineRef}
           onDone={handleIntroDone}
           getTier={getIntroTier}
+          scan={demoScan}
         />
       )}
 

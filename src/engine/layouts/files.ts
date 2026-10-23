@@ -1,4 +1,5 @@
 import type { Scan } from '@/lib/types/scan'
+import { createLanguageIndexer } from './language-colors'
 
 export interface LayoutTarget {
   x: Float32Array
@@ -30,13 +31,16 @@ export interface ThemeColors {
 
 /**
  * Calculates dot positions and properties for the Files grid layout.
- * Conforms strictly to REFERENCE.md:
+ * Conforms to REFERENCE.md:
  * - 24 columns by 10 rows for 240 files
  * - Diameter s = clamp(6, round(W / 90), 12), capped at 0.8 * P
  * - Center cx = W / 2, cy = H / 2 - 8
  * - Pitch P = min(W / (COLS + 1), H / (ROWS + 3))
  * - Centered coordinates with s / 2 offset
- * - Opacity 0.85, color is fg
+ * - Opacity 0.85
+ * - Dot color = the file's language (c1..c5 by bytes rank, shared with
+ *   the Languages layout); when the scan counts no languages the dots
+ *   stay fg (there is no data to encode)
  */
 export function calculateFilesLayout(
   scan: Scan,
@@ -67,6 +71,8 @@ export function calculateFilesLayout(
   const b = new Uint8ClampedArray(n)
 
   const [fgR, fgG, fgB] = theme.fg
+  const colorPerLanguage = createLanguageIndexer(scan)
+  const themeColors = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
 
   const colOffset = (cols - 1) / 2
   const rowOffset = (rows - 1) / 2
@@ -79,9 +85,17 @@ export function calculateFilesLayout(
     y[i] = cy + (row - rowOffset) * P - halfS
     size[i] = s
     alpha[i] = 0.85
-    r[i] = fgR
-    g[i] = fgG
-    b[i] = fgB
+
+    if (scan.languages.length === 0) {
+      r[i] = fgR
+      g[i] = fgG
+      b[i] = fgB
+    } else {
+      const [cr, cg, cb] = themeColors[colorPerLanguage(scan.files[i]?.language)] ?? theme.fg
+      r[i] = cr
+      g[i] = cg
+      b[i] = cb
+    }
   }
 
   return {

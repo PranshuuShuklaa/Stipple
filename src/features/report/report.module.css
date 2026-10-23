@@ -1,0 +1,233 @@
+/* Report page: story grid, sticky stage, sections under the story.
+ * Numbers follow REFERENCE.md "Stage and story layout" and
+ * "Sections under the story"; colors only from tokens.css. */
+
+/* --- The story --- */
+
+.story {
+  /* The stage height lives on a custom property so the DotStage panel can
+   * resize per breakpoint without touching its own module. */
+  --stage-h: min(72vh, 580px);
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  grid-template-areas: 'steps stage';
+  gap: 48px;
+}
+
+.steps {
+  grid-area: steps;
+  display: flex;
+  flex-direction: column;
+}
+
+.step {
+  min-height: 80vh;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  opacity: 0.25;
+  transition: opacity 0.5s linear;
+}
+
+.stepActive {
+  opacity: 1;
+}
+
+.stepHeadline {
+  margin: 0 0 16px;
+}
+
+.stepBody {
+  max-width: 34ch;
+  font-size: 18px;
+  line-height: 1.45;
+  color: var(--dim);
+}
+
+.stageSlot {
+  grid-area: stage;
+}
+
+.stagePin {
+  position: sticky;
+  top: 10vh;
+}
+
+/* Mobile: one column, the stage pins at the top and steps scroll under it. */
+@media (max-width: 820px) {
+  .story {
+    display: flex;
+    flex-direction: column;
+    gap: 0;
+    --stage-h: 44vh;
+  }
+
+  .stageSlot {
+    order: -1;
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    margin-bottom: 16px;
+  }
+
+  .stagePin {
+    position: static;
+  }
+
+  .step {
+    min-height: 70vh;
+  }
+}
+
+/* --- Sections under the story --- */
+
+.sections {
+  padding-bottom: 140px;
+}
+
+.sections > section {
+  border-top: 1px solid var(--line);
+  padding-top: 56px;
+}
+
+.sectionHeadline {
+  margin: 0 0 24px;
+}
+
+.sectionBody {
+  max-width: 60ch;
+  color: var(--dim);
+  margin: 0 0 32px;
+}
+
+/* Health */
+
+.healthBody {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 48px;
+}
+
+.ring {
+  flex-shrink: 0;
+}
+
+.ringTrack {
+  stroke: var(--line);
+  fill: none;
+}
+
+.ringProgress {
+  stroke: var(--c1);
+  fill: none;
+}
+
+.checklist {
+  flex: 1;
+  min-width: 240px;
+}
+
+.checkRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-block: 10px;
+  border-bottom: 1px solid var(--line);
+  font-size: 15px;
+}
+
+.checkName {
+  color: var(--fg);
+}
+
+.checkPass {
+  color: var(--fg);
+  font-weight: 600;
+}
+
+.checkMiss {
+  color: var(--dim);
+}
+
+/* Numbers */
+
+.statsRow {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 48px 72px;
+}
+
+.statLabel {
+  font-size: 15px;
+  color: var(--dim);
+  margin: 0 0 8px;
+}
+
+.statValue {
+  font-size: clamp(44px, 7vw, 92px);
+  font-weight: 600;
+  line-height: 0.9;
+  letter-spacing: -0.035em;
+  font-variant-numeric: tabular-nums;
+  margin: 0;
+}
+
+.statValueEmpty {
+  color: var(--dim);
+}
+
+.statNote {
+  font-size: 14px;
+  color: var(--dim);
+  margin: 8px 0 0;
+}
+
+/* Dependencies */
+
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.chip {
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  font-size: 14px;
+  line-height: 1;
+  color: var(--fg);
+}
+
+/* Error screen */
+
+.errorWrap {
+  padding-block: 96px 160px;
+}
+
+.errorTitle {
+  margin: 0 0 12px;
+}
+
+.errorBody {
+  max-width: 60ch;
+  color: var(--dim);
+  margin: 0 0 32px;
+}
+
+.errorAction {
+  display: inline-block;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 12px 20px;
+  font-size: 15px;
+  color: var(--fg);
+  transition: border-color var(--dur-fast, 180ms) linear;
+}
+
+.errorAction:hover {
+  border-color: var(--dim);
+}
