@@ -30,6 +30,8 @@ export type ScanScreenPhase = 'streaming' | 'fallback' | 'revealing' | 'error'
 export interface DesignedError {
   code: string
   message: string
+  /** ISO reset time for rate limits; the UI renders it in human copy. */
+  resetAt?: string
 }
 
 export interface ScanFlowState {
@@ -54,6 +56,27 @@ export type ScanFlowEvent =
 export const MAX_WAIT_ERROR: DesignedError = {
   code: 'upstream',
   message: 'The scan took longer than 15 seconds without an answer. Try again.',
+}
+
+export const FALLBACK_FETCH_ERROR: DesignedError = {
+  code: 'upstream',
+  message: 'GitHub is having trouble right now. Try again in a few minutes.',
+}
+
+export const NETWORK_LOST_ERROR: DesignedError = {
+  code: 'network_lost',
+  message: 'The page could not reach the network. Check the connection, then run the scan again.',
+}
+
+/**
+ * What an aborted direct request means. Browsers throw TypeError for
+ * every network-level failure (offline, DNS, refused), while a real
+ * server answer always arrives as the body's designed error — so the
+ * distinction is exact and keeps "network lost" from hiding real states.
+ */
+export function classifyFallbackFailure(error: unknown): DesignedError {
+  if (error instanceof TypeError) return NETWORK_LOST_ERROR
+  return FALLBACK_FETCH_ERROR
 }
 
 export function initialScanFlowState(): ScanFlowState {

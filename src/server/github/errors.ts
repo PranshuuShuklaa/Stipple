@@ -58,10 +58,9 @@ export class RateLimitedError extends ApiError {
   readonly resetAt: string
 
   constructor(resetAtIso: string) {
-    super(
-      'rate_limited',
-      `The shared GitHub rate limit is used up. It resets at ${resetAtIso}.`,
-    )
+    // Plain message only: the reset time travels separately (resetAt)
+    // and the UI renders it in human copy (src/lib/scan-error-copy.ts).
+    super('rate_limited', 'The shared GitHub rate limit is used up.')
     this.resetAt = resetAtIso
   }
 

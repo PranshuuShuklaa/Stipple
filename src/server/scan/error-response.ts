@@ -51,11 +51,30 @@ export function errorToResponse(error: unknown, now: Date = new Date()): Respons
   return Response.json({ error: errorBodyOf(error) }, { status: known ? CODE_STATUS[known.code] : 502, headers })
 }
 
-/** The plain { code, message } error body the API routes send. */
-export function errorBodyOf(error: unknown): { code: ApiErrorCode; message: string } {
+/** Rate-limit errors carry their reset time so the UI can copy it in human terms. */
+export interface DesignedErrorBody {
+  code: ApiErrorCode
+  message: string
+  resetAt?: string
+}
+
+function resetAtOf(known: ApiError): string | undefined {
+  if (known.code !== 'rate_limited') return undefined
+  const probe = known as { resetAt?: unknown }
+  if (typeof probe.resetAt !== 'string') return undefined
+  return Number.isNaN(new Date(probe.resetAt).getTime()) ? undefined : probe.resetAt
+}
+
+/** The plain designed error body the API routes and streams send. */
+export function errorBodyOf(error: unknown): DesignedErrorBody {
   const known = knownApiErrorOf(error)
   if (!known) return { code: 'upstream', message: EPHEMERAL_MESSAGE }
-  return { code: known.code, message: GENERIC_MESSAGE[known.code] ?? known.message }
+  const resetAt = resetAtOf(known)
+  return {
+    code: known.code,
+    message: GENERIC_MESSAGE[known.code] ?? known.message,
+    ...(resetAt === undefined ? {} : { resetAt }),
+  }
 }
 
 function retryAfterSecondsFor(known: ApiError, now: Date): number | null {

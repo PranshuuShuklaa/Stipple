@@ -7,7 +7,10 @@ import {
   scanStageIndexOf,
 } from '@/lib/scan-stages'
 import {
+  FALLBACK_FETCH_ERROR,
   MAX_WAIT_ERROR,
+  NETWORK_LOST_ERROR,
+  classifyFallbackFailure,
   createPlaceholderScan,
   initialScanFlowState,
   processScanFlowEvent,
@@ -154,6 +157,17 @@ describe('the line never finishes before the data', () => {
     expect(crept).toBeLessThanOrEqual(SCAN_LINE_CAPS[4]!)
     const fraction = sweepRevealFraction(SCAN_REVEAL_MS, crept)
     expect(fraction).toBeCloseTo(1, 5)
+  })
+})
+
+describe('phase designed errors', () => {
+  it('classifies a network-level fetch failure as network lost', () => {
+    const lost = classifyFallbackFailure(new TypeError('Failed to fetch'))
+    expect(lost.code).toBe('network_lost')
+    expect(lost.message).toContain('network')
+
+    expect(classifyFallbackFailure(new Error('answer unexpected'))).toBe(FALLBACK_FETCH_ERROR)
+    expect(NETWORK_LOST_ERROR.code).toBe('network_lost')
   })
 })
 

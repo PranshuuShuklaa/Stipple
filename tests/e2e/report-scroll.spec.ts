@@ -40,12 +40,20 @@ test('steps down through every layout and back up, ending on files again', async
   })
 })
 
-test('files legend shows language swatches when the scan counts languages', async ({ page }) => {
-  const legend = page.locator('xpath=//span[contains(text(), "files") or contains(text(), "Files")]').first()
-  await expect(legend).toBeVisible()
-  // Language swatches (DESIGN.md rule: color + label) appear next to the
-  // files count when more than one language is counted.
-  const swatches = page.locator('i.swatch, [class*=swatch]')
+test('the files legend shows the real file count on the report stage', async ({ page }) => {
+  // The legend line renders as "N files" (string-value match: React splits
+  // the number and the unit into separate text nodes, so text() must not
+  // be used inside contains).
+  const legend = page.locator('[class*="legend"]', { hasText: 'files' }).first()
+  await expect(legend).toContainText('1 files')
+})
+
+test('the shared dot stage legend lists language swatches for the demo fixture', async ({ page }) => {
+  // The report repo (Hello-World) counts a single language, so its Files
+  // legend correctly has no swatches (DESIGN.md: swatches only with data).
+  // /dev/engine runs the real DotStage on the 5-language fixture.
+  await page.goto('/dev/engine')
+  const swatches = page.locator('[class*="swatch"]')
   await expect(swatches.first()).toBeVisible()
   await expect(swatches.first()).toHaveCSS('background-color', /rgb\(/)
 })

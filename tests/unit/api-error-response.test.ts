@@ -11,7 +11,7 @@ import { errorToResponse, knownApiErrorOf } from '@/server/scan/error-response'
 
 const NOW = new Date('2029-12-31T23:58:30Z')
 
-async function body(response: Response): Promise<{ error: { code: string; message: string } }> {
+async function body(response: Response): Promise<{ error: { code: string; message: string; resetAt?: string } }> {
   return (await response.json()) as { error: { code: string; message: string } }
 }
 
@@ -50,6 +50,10 @@ describe('errorToResponse', () => {
     const response = errorToResponse(new RateLimitedError('2030-01-01T00:00:00Z'), NOW)
     expect(response.status).toBe(429)
     expect(response.headers.get('retry-after')).toBe('90')
+
+    const parsed = await body(response)
+    expect(parsed.error.message).not.toContain('2030')
+    expect(parsed.error.resetAt).toBe('2030-01-01T00:00:00Z')
 
     const past = errorToResponse(new RateLimitedError('2000-01-01T00:00:00Z'), NOW)
     expect(past.headers.get('retry-after')).toBe('0')

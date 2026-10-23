@@ -2,6 +2,7 @@ import { beforeAll, describe, expect, it, vi } from 'vitest'
 import { buildScan } from '@/server/scan/build-scan'
 import {
   EmptyRepoError,
+  InvalidInputError,
   NotFoundError,
   PrivateOrMissingError,
   RateLimitedError,
@@ -223,6 +224,16 @@ describe('buildScan (happy path)', () => {
 })
 
 describe('buildScan (designed failures)', () => {
+  it('refuses invalid owner/repo names without touching the network', async () => {
+    const router = routerFetch([
+      { match: () => true, respond: () => { throw new Error('no request may be sent for invalid input') } },
+    ])
+
+    const error = (await caught(buildScan('bad owner!', '../x', optionsFor(router, null)))) as InvalidInputError
+    expect(error).toBeInstanceOf(InvalidInputError)
+    expect(error.code).toBe('invalid_input')
+  })
+
   it('answers PrivateOrMissing when the account exists but the repo does not resolve', async () => {
     const router = routerFetch([
       repoStatus(404, { message: 'Not Found' }),

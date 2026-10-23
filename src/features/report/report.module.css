@@ -218,6 +218,29 @@
   margin: 0 0 32px;
 }
 
+.errorNote {
+  max-width: 60ch;
+  color: var(--dim);
+  margin: -20px 0 28px;
+  font-size: 15px;
+}
+
+.errorActions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.errorPrimary {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c1);
+  color: #fff;
+  font-size: 15px;
+  font-weight: 600;
+}
+
 .errorAction {
   display: inline-block;
   border: 1px solid var(--line);

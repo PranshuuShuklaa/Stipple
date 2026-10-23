@@ -9,7 +9,9 @@ import type { DotEngine } from '@/engine/renderer'
 import type { Scan } from '@/lib/types/scan'
 import { SCAN_FALLBACK_AFTER_MS, SCAN_MAX_WAIT_MS, SCAN_REVEAL_MS, type ScanStageEvent } from '@/lib/scan-stages'
 import {
+  FALLBACK_FETCH_ERROR,
   MAX_WAIT_ERROR,
+  classifyFallbackFailure,
   createPlaceholderScan,
   initialScanFlowState,
   processScanFlowEvent,
@@ -19,23 +21,10 @@ import {
   type ScanFlowEvent,
   type ScanFlowState,
 } from './scan-flow'
+import { rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
 import styles from './scan-screen.module.css'
 
 const PLACEHOLDER_DOT_COUNT = 240
-
-const FALLBACK_FETCH_ERROR: DesignedError = {
-  code: 'upstream',
-  message: 'GitHub is having trouble right now. Try again in a few minutes.',
-}
-
-const ERROR_TITLE: Record<string, string> = {
-  not_found: 'No report for this repo.',
-  private_or_missing: 'This repo is not reachable.',
-  empty_repo: 'Nothing to scan yet.',
-  rate_limited: 'The shared GitHub limit is used up.',
-  invalid_input: 'That address does not look right.',
-  upstream: 'GitHub is having trouble.',
-}
 
 type SweepModeName = 'off' | 'waiting' | 'shimmer' | 'reveal'
 
@@ -182,9 +171,9 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
         } else {
           process({ type: 'designed-error', error: FALLBACK_FETCH_ERROR })
         }
-      } catch {
+      } catch (error) {
         if (controller.signal.aborted) return
-        process({ type: 'designed-error', error: FALLBACK_FETCH_ERROR })
+        process({ type: 'designed-error', error: classifyFallbackFailure(error) })
       }
     }
     void run()
@@ -286,18 +275,23 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   }, [state.navigated, router, owner, repo])
 
   if (state.phase === 'error') {
+    const code = state.error?.code ?? 'upstream'
+    const message = state.error?.message ?? 'The scan could not finish.'
+    const resetNote =
+      code === 'rate_limited' && state.error?.resetAt ? rateLimitResetCopy(state.error.resetAt) : ''
     return (
       <div className="shell">
-        <h1 className="type-section">
-          {ERROR_TITLE[state.error?.code ?? 'upstream'] ?? 'GitHub is having trouble.'}
-        </h1>
+        <h1 className="type-section">{scanErrorTitle(code)}</h1>
         <p className={styles.errorBody}>
-          github.com/{owner}/{repo}: {state.error?.message ?? 'The scan could not finish.'}
+          github.com/{owner}/{repo}: {message}
         </p>
+        {resetNote !== '' && <p className={styles.resetNote}>{resetNote}</p>}
         <div className={styles.actions}>
-          <button type="button" className={styles.retry} onClick={retry}>
-            Retry
-          </button>
+          {scanErrorRetries(code) && (
+            <button type="button" className={styles.retry} onClick={retry}>
+              Try again
+            </button>
+          )}
           <Link href="/" className={styles.alt}>
             Scan a different repo
           </Link>

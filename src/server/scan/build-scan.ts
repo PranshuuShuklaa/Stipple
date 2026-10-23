@@ -18,8 +18,14 @@ import type {
 } from '@/server/github/raw-types'
 import type { ScanStageEvent, ScanStageName } from '@/lib/scan-stages'
 import { SCAN_STAGE_TOTAL, scanStageIndexOf } from '@/lib/scan-stages'
+import { isValidOwnerRepo } from '@/lib/repo-input'
 import type { RetryOptions, StatsOutcome } from '@/server/github/retry'
-import { NotFoundError, PrivateOrMissingError, RateLimitedError } from '@/server/github/errors'
+import {
+  InvalidInputError,
+  NotFoundError,
+  PrivateOrMissingError,
+  RateLimitedError,
+} from '@/server/github/errors'
 import {
   activityFromRaw,
   commitsTotalFromRaw,
@@ -104,6 +110,11 @@ function emitStage(
 }
 
 export async function buildScan(owner: string, repo: string, options: BuildScanOptions = {}): Promise<Scan> {
+  // Page URLs like /r/owner/repo skip the API route's validation, so the
+  // scan itself refuses invalid names and every consumer reports the
+  // same designed invalid-input state.
+  if (!isValidOwnerRepo(owner, repo)) throw new InvalidInputError()
+
   const ref = { owner, repo }
   const now = options.now ?? new Date()
 

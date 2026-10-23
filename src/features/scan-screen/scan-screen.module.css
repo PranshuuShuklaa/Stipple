@@ -19,10 +19,16 @@
 
 .errorBody {
   max-width: 52ch;
-  margin-bottom: 20px;
+  margin-bottom: 8px;
   color: var(--dim);
   font-size: 18px;
   line-height: 1.5;
+}
+
+.resetNote {
+  margin: 0 0 24px;
+  color: var(--dim);
+  font-size: 15px;
 }
 
 .actions {

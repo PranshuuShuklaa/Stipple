@@ -74,9 +74,12 @@ test('a healthy stream finishes the sweep and opens the report', async ({ page }
 
 test('a blocked stream falls back to the direct request and still completes', async ({ page }) => {
   await page.route('**/api/scan-progress/**', (route) => route.abort())
-  await page.route('**/api/repo/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scan: fixtureScan(6) }) }),
-  )
+  await page.route('**/api/repo/**', async (route) => {
+    // The direct answer arrives 800 ms late, so the honest fallback copy
+    // stays on screen long enough to be observed (a local reply is fast).
+    await new Promise((resolve) => setTimeout(resolve, 800))
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ scan: fixtureScan(6) }) })
+  })
 
   await page.goto(SCAN_URL)
   await expect(page.getByRole('status')).toContainText(/direct way/i)
@@ -96,7 +99,7 @@ test('a designed error event shows the error screen with Retry', async ({ page }
   )
 
   await page.goto(SCAN_URL)
-  const retry = page.getByRole('button', { name: /retry/i })
+  const retry = page.getByRole('button', { name: /try again/i })
   await expect(retry).toBeVisible({ timeout: 10_000 })
   await expect(page.locator('h1')).toContainText(/shared GitHub limit/i)
   await expect(page.locator('body')).toContainText('github.com/octo/Hello-World')
@@ -104,13 +107,23 @@ test('a designed error event shows the error screen with Retry', async ({ page }
   await expect(page).not.toHaveURL(new RegExp(`/r/${OWNER}/${REPO}$`))
 })
 
-test('the status line stays quiet about the internals and reads like a human wrote it', async ({ page }) => {
+test('the status line reads like a human wrote it while the scan waits', async ({ page }) => {
+  // Stage events only, no done event: the screen keeps waiting on the
+  // stream honestly (the 15 s cap guards it after this test ends). The
+  // stage copies land in one chunk in a mock, so the visible state is the
+  // last waiting line — the point of the test is that the line is human
+  // words about scan meaning, never parse internals. Number formatting
+  // ("1,234 files") is covered in tests/unit/scan-flow.test.ts.
   await page.route('**/api/scan-progress/**', (route) =>
-    route.fulfill({ status: 200, contentType: 'text/event-stream', body: sseBody(1_234) }),
+    route.fulfill({
+      status: 200,
+      contentType: 'text/event-stream',
+      body: stageList(1_234).map((stage) => streamEvent('stage', stage)).join(''),
+    }),
   )
 
   await page.goto(SCAN_URL)
   const status = page.getByRole('status')
+  await expect(status).toContainText(/Putting the report together/, { timeout: 10_000 })
   await expect(status).not.toContainText(/stage|API|event|json/i)
-  await expect(status).toContainText(/1,234/)
 })
