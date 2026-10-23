@@ -14,6 +14,8 @@ export interface DotStageProps {
   ariaLabel?: string
   initialLayout?: LayoutName
   onLayoutChange?: (layout: LayoutName) => void
+  /** Dev-only fps/tier/dot-count overlay (used by the /dev/engine stage). */
+  showDevOverlay?: boolean
 }
 
 export interface DotStageHandle {
@@ -29,7 +31,7 @@ function formatBytes(bytes: number): string {
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange },
+  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -140,10 +142,10 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
 
   // Dev-only stats polling for the overlay; tier changes broadcast via onTierChange
   useEffect(() => {
-    if (!isDev) return
+    if (!isDev || !showDevOverlay) return
     const interval = window.setInterval(readEngineStats, 500)
     return () => window.clearInterval(interval)
-  }, [isDev, readEngineStats])
+  }, [isDev, showDevOverlay, readEngineStats])
 
   // Animate folder labels on entry
   useEffect(() => {
@@ -188,7 +190,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       />
 
       {/* Dev-only quality overlay (fps, tier, dot count) */}
-      {isDev && stats && (
+      {isDev && showDevOverlay && stats && (
         <p className={styles.devOverlay} aria-hidden="true">
           {stats.fps !== null ? `${Math.round(stats.fps)} fps` : 'measuring…'} · tier{' '}
           {stats.tier ? stats.tier.label : '—'} · {stats.dotCount} dots

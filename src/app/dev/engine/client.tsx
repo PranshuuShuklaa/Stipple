@@ -2,7 +2,7 @@
 
 import { useRef, useState } from 'react'
 import type { Scan } from '@/lib/types/scan'
-import { DotStage, type DotStageHandle } from '@/features/report/dot-stage'
+import { DotStage, type DotStageHandle } from '@/components/ui/dot-stage'
 import type { LayoutName } from '@/engine/renderer'
 
 interface DevEngineClientProps {
@@ -184,6 +184,7 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
         scan={scan}
         initialLayout={activeLayout}
         onLayoutChange={(l) => setActiveLayout(l)}
+        showDevOverlay
       />
 
       {/* Specifications & Layout Summary */}

@@ -206,9 +206,3 @@ h3 {
     display: none;
   }
 }
-
-/* Home page */
-
-.home {
-  padding-top: clamp(48px, 9vh, 128px);
-}

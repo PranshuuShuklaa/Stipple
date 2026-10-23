@@ -1,0 +1,63 @@
+/* Repo input: an underline field with a github.com/ prefix and a pill
+ * button. Numbers follow reference/repolens-reference.html (2 px --fg
+ * underline, 20 px input text, 44 px pill, 12 px gap). */
+
+.form {
+  max-width: 600px;
+}
+
+.fieldRow {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  border-bottom: 2px solid var(--fg);
+}
+
+.prefix {
+  color: var(--dim);
+  font-size: 20px;
+  line-height: 1;
+  flex: none;
+  white-space: nowrap;
+}
+
+.input {
+  flex: 1;
+  min-width: 0;
+  background: none;
+  border: 0;
+  color: var(--fg);
+  font: inherit;
+  font-size: 20px;
+  padding: 12px 0;
+}
+
+.input::placeholder {
+  color: var(--dim);
+  opacity: 1;
+}
+
+.button {
+  background: var(--fg);
+  color: var(--bg);
+  border: 0;
+  border-radius: 999px;
+  height: 44px;
+  padding: 0 22px;
+  font-weight: 600;
+  margin-bottom: 6px;
+  transition: background-color var(--dur-fast, 180ms) linear;
+}
+
+.button:hover {
+  background: var(--c1);
+}
+
+.message {
+  min-height: 24px;
+  margin: 10px 0 0;
+  color: var(--dim);
+  font-size: 15px;
+  line-height: 1.4;
+}

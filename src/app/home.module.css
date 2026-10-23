@@ -1,0 +1,29 @@
+/* Home page hero and demo section. Spacing numbers follow
+ * reference/repolens-reference.html (h1 margin 40/20, sub 46ch, story
+ * 48 px gap). The page itself carries no top padding: the headline sits
+ * 40 px under the header, and the demo stage must stay partly visible
+ * at 1280x720 without scrolling. */
+
+.headline {
+  margin: 40px 0 20px;
+}
+
+.sentence {
+  max-width: 46ch;
+  margin: 0 0 24px;
+  color: var(--dim);
+  font-size: 18px;
+  line-height: 1.4;
+}
+
+.demo {
+  margin-top: 48px;
+  padding-bottom: 96px;
+}
+
+.demoLabel {
+  margin: 0 0 10px;
+  color: var(--dim);
+  font-weight: 400;
+  line-height: 1.4;
+}
