@@ -15,6 +15,8 @@ import {
   type QualityTierName,
 } from './quality'
 import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
+import { PointerWakeEffect } from './effects/pointer-wake'
+import { ShockwaveEffect } from './effects/shockwave'
 
 export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
 
@@ -102,6 +104,12 @@ export class DotEngine {
   private isDestroyed = false
   private rafId: number | null = null
 
+  // Effects: pointer wake (physics spring) and click shockwave
+  private pointerWake = new PointerWakeEffect()
+  private shockwave = new ShockwaveEffect()
+  private pointerX = -9999
+  private pointerY = -9999
+
   // Observers & event listeners
   private resizeObserver: ResizeObserver | null = null
   private intersectionObserver: IntersectionObserver | null = null
@@ -109,6 +117,7 @@ export class DotEngine {
   private boundVisibilityChange: () => void
   private boundPointerMove: (e: PointerEvent) => void
   private boundPointerLeave: () => void
+  private boundPointerDown: (e: PointerEvent) => void
   private boundReducedMotionChange: (() => void) | null = null
 
   // Spatial grid for O(1) hover queries
@@ -156,6 +165,7 @@ export class DotEngine {
     this.boundVisibilityChange = this.handleVisibilityChange.bind(this)
     this.boundPointerMove = this.handlePointerMove.bind(this)
     this.boundPointerLeave = this.handlePointerLeave.bind(this)
+    this.boundPointerDown = this.handlePointerDown.bind(this)
     this.setupObservers()
     this.setupPointerListeners()
 
@@ -231,6 +241,7 @@ export class DotEngine {
     this.targetB = new Uint8ClampedArray(n)
 
     this.progressTargets = Array.from({ length: n }, () => ({ p: 1 }))
+    this.pointerWake.allocate(n)
 
     this.hoveredIndex = -1
     this.onHoverChange?.(null)
@@ -326,12 +337,16 @@ export class DotEngine {
   private setupPointerListeners(): void {
     this.canvas.addEventListener('pointermove', this.boundPointerMove)
     this.canvas.addEventListener('pointerleave', this.boundPointerLeave)
+    this.canvas.addEventListener('pointerdown', this.boundPointerDown)
   }
 
   private handlePointerMove(e: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect()
     const qx = e.clientX - rect.left
     const qy = e.clientY - rect.top
+
+    this.pointerX = qx
+    this.pointerY = qy
 
     // Query spatial grid with max hit distance
     const hitRadius = 24
@@ -341,16 +356,29 @@ export class DotEngine {
     if (newIndex !== this.hoveredIndex) {
       this.hoveredIndex = newIndex
       this.onHoverChange?.(newIndex !== -1 ? newIndex : null)
-      this.render()
     }
   }
 
   private handlePointerLeave(): void {
+    this.pointerX = -9999
+    this.pointerY = -9999
     if (this.hoveredIndex !== -1) {
       this.hoveredIndex = -1
       this.onHoverChange?.(null)
-      this.render()
     }
+  }
+
+  private handlePointerDown(e: PointerEvent): void {
+    // Low tier: no shockwave (DESIGN.md / REFERENCE.md)
+    if (this.qualityTier.name === 'low') return
+    const rect = this.canvas.getBoundingClientRect()
+    this.shockwave.trigger(e.clientX - rect.left, e.clientY - rect.top)
+  }
+
+  /** External API: fire a shockwave at canvas-local (x, y). Used by the intro overlay. */
+  public triggerShockwave(x: number, y: number): void {
+    if (this.isDestroyed || this.qualityTier.name === 'low') return
+    this.shockwave.trigger(x, y)
   }
 
   private handleVisibilityChange(): void {
@@ -546,6 +574,14 @@ export class DotEngine {
       }
     }
 
+    // Tick pointer-wake physics (High tier only)
+    if (this.qualityTier.effects.pointerField) {
+      this.pointerWake.update(
+        this.x, this.y, this.size, this.dotCount,
+        this.pointerX, this.pointerY
+      )
+    }
+
     this.render()
     this.rafId = requestAnimationFrame(this.loop.bind(this))
   }
@@ -580,6 +616,8 @@ export class DotEngine {
     const hovered = this.hoveredIndex
     const hx = hovered !== -1 ? this.x[hovered] + this.size[hovered] / 2 : -9999
     const hy = hovered !== -1 ? this.y[hovered] + this.size[hovered] / 2 : -9999
+    const hasWake = this.qualityTier.effects.pointerField
+    const hasShockwave = this.qualityTier.name !== 'low' && this.shockwave.getActiveCount() > 0
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -607,12 +645,27 @@ export class DotEngine {
       let a = this.alpha[i]
       const isHoveredDot = i === hovered
 
+      // Base canvas-space center of this dot
+      let cx = this.x[i] + radius
+      let cy = this.y[i] + radius
+
+      // Pointer wake spring offset (High tier only)
+      if (hasWake) {
+        cx += this.pointerWake.getOffsetX(i)
+        cy += this.pointerWake.getOffsetY(i)
+      }
+
+      // Shockwave radial displacement (Medium + High tiers)
+      if (hasShockwave) {
+        const [swX, swY] = this.shockwave.getDisplacement(cx, cy)
+        cx += swX
+        cy += swY
+      }
+
       // Fisheye lift for dots within 80px radius (DESIGN.md)
       if (hovered !== -1) {
-        const dotCx = this.x[i] + radius
-        const dotCy = this.y[i] + radius
-        const dx = dotCx - hx
-        const dy = dotCy - hy
+        const dx = cx - hx
+        const dy = cy - hy
         const distSq = dx * dx + dy * dy
         if (distSq < 6400) {
           // within 80px
@@ -626,7 +679,7 @@ export class DotEngine {
       if (radius > 0.05 && a > 0.01) {
         ctx.fillStyle = `rgba(${this.r[i]}, ${this.g[i]}, ${this.b[i]}, ${a})`
         ctx.beginPath()
-        ctx.arc(this.x[i] + radius, this.y[i] + radius, radius, 0, Math.PI * 2)
+        ctx.arc(cx, cy, radius, 0, Math.PI * 2)
         ctx.fill()
 
         if (isHoveredDot) {
@@ -666,7 +719,10 @@ export class DotEngine {
     if (this.canvas) {
       this.canvas.removeEventListener('pointermove', this.boundPointerMove)
       this.canvas.removeEventListener('pointerleave', this.boundPointerLeave)
+      this.canvas.removeEventListener('pointerdown', this.boundPointerDown)
     }
+
+    this.shockwave.destroy()
 
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.boundVisibilityChange)
