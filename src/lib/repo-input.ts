@@ -59,3 +59,13 @@ export function parseRepoInput(raw: string): ParsedRepo | null {
 
   return { owner, repo }
 }
+
+/**
+ * Route-level shape validation (the rules /api/repo applies): the owner
+ * and repo segments of a scanned URL. Case is kept for display.
+ */
+export function isValidOwnerRepo(owner: string, repo: string): boolean {
+  const validOwner = owner.length <= 39 && OWNER_RE.test(owner)
+  const validRepo = repo.length <= 100 && REPO_RE.test(repo) && repo !== '.' && repo !== '..'
+  return validOwner && validRepo
+}

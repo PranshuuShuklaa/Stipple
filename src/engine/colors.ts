@@ -42,6 +42,7 @@ export function resolveThemeColors(element?: HTMLElement | null): ThemeColors {
   if (typeof window === 'undefined') {
     return {
       fg: [26, 21, 51],
+      dim: [81, 73, 111],
       panel: [223, 217, 242],
       c1: [91, 43, 224],
       c2: [224, 36, 110],
@@ -61,6 +62,7 @@ export function resolveThemeColors(element?: HTMLElement | null): ThemeColors {
 
   return {
     fg: parseColor(getProp('--fg', '#1A1533')),
+    dim: parseColor(getProp('--dim', '#51496F')),
     panel: parseColor(getProp('--panel', '#DFD9F2')),
     c1: parseColor(getProp('--c1', '#5B2BE0')),
     c2: parseColor(getProp('--c2', '#E0246E')),

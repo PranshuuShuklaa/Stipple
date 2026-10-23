@@ -398,3 +398,70 @@ describe('buildScan (degradations)', () => {
     expect(withToken).toHaveLength(0)
   })
 })
+
+describe('buildScan (stage events for the progress viewer)', () => {
+  it('fires tree, languages, activity, health in order and carries the tree file count', async () => {
+    const router = routerFetch([
+      repoRoute(rawRepo()),
+      treeRoute({}),
+      languagesRoute({ JavaScript: 2000, TypeScript: 8000 }),
+      ...statsRoutes(),
+      communityRoute(),
+      contentsRoute({ 'package.json': PROD_DEPS }),
+    ])
+
+    const stages: Array<{ stage: string; index: number; total: number; files?: number }> = []
+    const scan = await buildScan(OWNER, REPO, optionsFor(router, null, {
+      onStage: (event) => stages.push({ ...event }),
+    }))
+
+    expect(stages.map((event) => event.stage)).toEqual(['tree', 'languages', 'activity', 'health'])
+    expect(stages.map((event) => [event.index, event.total])).toEqual([[1, 4], [2, 4], [3, 4], [4, 4]])
+    expect(stages[0]?.files).toBe(scan.files.length)
+    expect(stages.slice(1)).not.toContainEqual(expect.objectContaining({ files: expect.anything() }))
+  })
+
+  it('never fires events without an observer, and the scan stays identical either way', async () => {
+    const withObserver = routerFetch([
+      repoRoute(rawRepo()),
+      treeRoute({}),
+      languagesRoute({ JavaScript: 2000, TypeScript: 8000 }),
+      ...statsRoutes(),
+      communityRoute(),
+      contentsRoute({ 'package.json': PROD_DEPS }),
+    ])
+    const withoutObserver = routerFetch([
+      repoRoute(rawRepo()),
+      treeRoute({}),
+      languagesRoute({ JavaScript: 2000, TypeScript: 8000 }),
+      ...statsRoutes(),
+      communityRoute(),
+      contentsRoute({ 'package.json': PROD_DEPS }),
+    ])
+
+    const a = await buildScan(OWNER, REPO, optionsFor(withObserver, null, { onStage: () => {} }))
+    const b = await buildScan(OWNER, REPO, optionsFor(withoutObserver, null))
+    expect(b).toEqual(a)
+  })
+
+  it('keeps only the stages that genuinely completed and still returns the designed error', async () => {
+    const router = routerFetch([
+      repoRoute(rawRepo()),
+      treeRoute({}),
+      languagesRoute({}, 500),
+      ...statsRoutes(),
+      communityRoute(),
+    ])
+
+    const stages: string[] = []
+    const outcome = await caught(buildScan(OWNER, REPO, optionsFor(router, null, {
+      onStage: (event) => stages.push(event.stage),
+    }))) as UpstreamError
+
+    // The languages call failed, so it never fires its stage; the activity
+    // endpoint answered, so its stage did. Truthful progress, not order.
+    expect(stages).toEqual(['tree', 'activity'])
+    expect(outcome).toBeInstanceOf(UpstreamError)
+    expect(outcome.status).toBe(500)
+  })
+})

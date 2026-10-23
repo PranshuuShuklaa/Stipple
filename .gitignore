@@ -12,7 +12,7 @@ GEMINI.md
 .opencode/
 opencode.json
 PROGRESS.md
-reference/ 
+reference/
 
 # Secrets and environment (API keys live here, never in git)
 .env

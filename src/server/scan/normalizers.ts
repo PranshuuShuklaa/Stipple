@@ -58,12 +58,17 @@ function folderOf(path: string): string {
   return slash === -1 ? '(root)' : path.slice(0, slash)
 }
 
-/** Blobs only (no trees and no submodule commits). */
-export function filesFromTree(entries: RawTreeEntry[], languageFor: (fileName: string) => string | null): ScanFile[] {
+/** The tree entries the scan counts as files (blobs above sub-tree paths). */
+export function countedFileEntries(entries: RawTreeEntry[]): RawTreeEntry[] {
   const folders = new Set(entries.filter((entry) => entry.type === 'tree').map((entry) => entry.path))
   return entries
     .filter((entry) => entry.type === 'blob' && entry.path !== '')
     .filter((entry) => !folders.has(entry.path))
+}
+
+/** Blobs only (no trees and no submodule commits). */
+export function filesFromTree(entries: RawTreeEntry[], languageFor: (fileName: string) => string | null): ScanFile[] {
+  return countedFileEntries(entries)
     .map((entry) => ({
       path: entry.path,
       name: entry.path.slice(entry.path.lastIndexOf('/') + 1),
@@ -71,6 +76,11 @@ export function filesFromTree(entries: RawTreeEntry[], languageFor: (fileName: s
       language: languageFor(entry.path),
       folder: folderOf(entry.path),
     }))
+}
+
+/** The file count the tree stage announces (equals filesFromTree length). */
+export function countTreeFiles(entries: RawTreeEntry[]): number {
+  return countedFileEntries(entries).length
 }
 
 /** Sorted by bytes, descending; zero-byte languages dropped. */

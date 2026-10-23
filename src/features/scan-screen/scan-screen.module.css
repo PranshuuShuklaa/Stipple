@@ -1,0 +1,74 @@
+.wrap {
+  padding-block: 48px 96px;
+}
+
+.stageBox {
+  min-height: 320px;
+}
+
+.stage {
+  --stage-h: min(64vh, 560px);
+}
+
+.status {
+  min-height: 1.5em;
+  margin: 16px 0 0;
+  color: var(--dim);
+  font-size: 15px;
+}
+
+.errorBody {
+  max-width: 52ch;
+  margin-bottom: 20px;
+  color: var(--dim);
+  font-size: 18px;
+  line-height: 1.5;
+}
+
+.actions {
+  display: flex;
+  gap: 16px;
+  align-items: center;
+}
+
+.retry {
+  padding: 10px 22px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--c1);
+  color: #fff;
+  font: inherit;
+  font-size: 16px;
+  font-weight: 600;
+  cursor: pointer;
+}
+
+.alt {
+  color: var(--fg);
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+/* Reduced-motion arrival: a quiet cross-fade of the field. */
+.crossfade {
+  animation: scan-crossfade 300ms ease-out both;
+}
+
+@keyframes scan-crossfade {
+  from {
+    opacity: 0.35;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@media (max-width: 640px) {
+  .stageBox {
+    min-height: unset;
+  }
+
+  .stage {
+    --stage-h: 44vh;
+  }
+}

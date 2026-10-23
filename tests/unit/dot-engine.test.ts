@@ -19,6 +19,7 @@ import type { Scan } from '@/lib/types/scan'
 const theme = {
   fg: [26, 21, 51] as [number, number, number],
   panel: [223, 217, 242] as [number, number, number],
+  dim: [81, 73, 111] as [number, number, number],
   c1: [91, 43, 224] as [number, number, number],
   c2: [224, 36, 110] as [number, number, number],
   c3: [199, 119, 0] as [number, number, number],

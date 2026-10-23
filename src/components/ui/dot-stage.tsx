@@ -16,6 +16,8 @@ export interface DotStageProps {
   onLayoutChange?: (layout: LayoutName) => void
   /** Dev-only fps/tier/dot-count overlay (used by the /dev/engine stage). */
   showDevOverlay?: boolean
+  /** 'scan' hides hover readout and legend (placeholder dots must not read as data). */
+  variant?: 'full' | 'scan'
   /** Reports the stage's real container element once it exists (used by the intro for the zero-jump handoff). */
   onStageElementReady?: (el: HTMLDivElement) => void
   /** Reports the dot engine (null on unmount) — e.g. so the intro can read the real quality tier. */
@@ -35,7 +37,7 @@ function formatBytes(bytes: number): string {
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, onStageElementReady, onEngineReady },
+  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -223,44 +225,44 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       </div>
 
       {/* Hover readout top left */}
-      <p className={styles.readout} aria-live="polite">
-        {readoutContent}
-      </p>
+      {variant === 'full' && <p className={styles.readout} aria-live="polite">{readoutContent}</p>}
 
       {/* Legend bottom left */}
-      <div className={styles.legend} aria-hidden="true">
-        {currentLayout === 'files' && (
-          <>
-            <span>
-              {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length} files
-              {stats && stats.filesPerDot > 1 ? ` · one dot = ${stats.filesPerDot} files` : ''}
-            </span>
-            {languageStats.length > 1 &&
-              languageStats.map((item) => (
-                <span key={item.name} className={styles.legendItem}>
-                  <i className={styles.swatch} style={{ background: item.colorVar }} />
-                  {item.name} {item.pct}%
-                </span>
-              ))}
-          </>
-        )}
+      {variant === 'full' && (
+        <div className={styles.legend} aria-hidden="true">
+          {currentLayout === 'files' && (
+            <>
+              <span>
+                {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length} files
+                {stats && stats.filesPerDot > 1 ? ` · one dot = ${stats.filesPerDot} files` : ''}
+              </span>
+              {languageStats.length > 1 &&
+                languageStats.map((item) => (
+                  <span key={item.name} className={styles.legendItem}>
+                    <i className={styles.swatch} style={{ background: item.colorVar }} />
+                    {item.name} {item.pct}%
+                  </span>
+                ))}
+            </>
+          )}
 
-        {currentLayout === 'languages' && (
-          languageStats.map((item) => (
-            <span key={item.name} className={styles.legendItem}>
-              <i className={styles.swatch} style={{ background: item.colorVar }} />
-              {item.name} {item.pct}%
-            </span>
-          ))
-        )}
+          {currentLayout === 'languages' && (
+            languageStats.map((item) => (
+              <span key={item.name} className={styles.legendItem}>
+                <i className={styles.swatch} style={{ background: item.colorVar }} />
+                {item.name} {item.pct}%
+              </span>
+            ))
+          )}
 
-        {currentLayout === 'activity' && (
-          <span className={styles.legendItem}>
-            <i className={styles.swatch} style={{ background: 'var(--c1)' }} />
-            Commits per week. Left is 16 weeks ago, right is this week. Brighter is newer.
-          </span>
-        )}
-      </div>
+          {currentLayout === 'activity' && (
+            <span className={styles.legendItem}>
+              <i className={styles.swatch} style={{ background: 'var(--c1)' }} />
+              Commits per week. Left is 16 weeks ago, right is this week. Brighter is newer.
+            </span>
+          )}
+        </div>
+      )}
     </div>
   )
 })

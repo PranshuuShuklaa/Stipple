@@ -41,20 +41,21 @@ export function knownApiErrorOf(error: unknown): ApiError | null {
 
 export function errorToResponse(error: unknown, now: Date = new Date()): Response {
   const known = knownApiErrorOf(error)
-  if (!known) {
-    return Response.json({ error: { code: 'upstream', message: EPHEMERAL_MESSAGE } }, { status: 502 })
-  }
-
-  const status = CODE_STATUS[known.code]
-  const body = { error: { code: known.code, message: GENERIC_MESSAGE[known.code] ?? known.message } }
 
   const headers: Record<string, string> = {}
-  if (known.code === 'rate_limited') {
+  if (known?.code === 'rate_limited') {
     const seconds = retryAfterSecondsFor(known, now)
     if (seconds != null) headers['retry-after'] = String(seconds)
   }
 
-  return Response.json(body, { status, headers })
+  return Response.json({ error: errorBodyOf(error) }, { status: known ? CODE_STATUS[known.code] : 502, headers })
+}
+
+/** The plain { code, message } error body the API routes send. */
+export function errorBodyOf(error: unknown): { code: ApiErrorCode; message: string } {
+  const known = knownApiErrorOf(error)
+  if (!known) return { code: 'upstream', message: EPHEMERAL_MESSAGE }
+  return { code: known.code, message: GENERIC_MESSAGE[known.code] ?? known.message }
 }
 
 function retryAfterSecondsFor(known: ApiError, now: Date): number | null {

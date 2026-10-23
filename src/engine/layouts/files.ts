@@ -21,6 +21,7 @@ export interface Viewport {
 
 export interface ThemeColors {
   fg: [number, number, number] // [r, g, b]
+  dim: [number, number, number]
   panel: [number, number, number]
   c1: [number, number, number]
   c2: [number, number, number]

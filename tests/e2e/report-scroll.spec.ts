@@ -17,13 +17,6 @@ test('steps down through every layout and back up, ending on files again', async
   const stage = page.getByRole('img', { name: /field of dots/i })
   await expect(stage).toBeVisible()
 
-  const stepDescriptions = [
-    /files/i,
-    /language/i,
-    /commits/i,
-    /folder/i,
-  ] as const
-
   const scrollToStep = async (index: number) => {
     const step = page.locator('[data-step-index]').nth(index)
     await step.scrollIntoViewIfNeeded()

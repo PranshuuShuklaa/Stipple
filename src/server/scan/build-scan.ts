@@ -16,12 +16,15 @@ import type {
   RawCommitActivityWeek,
   RawContributorStats,
 } from '@/server/github/raw-types'
+import type { ScanStageEvent, ScanStageName } from '@/lib/scan-stages'
+import { SCAN_STAGE_TOTAL, scanStageIndexOf } from '@/lib/scan-stages'
 import type { RetryOptions, StatsOutcome } from '@/server/github/retry'
 import { NotFoundError, PrivateOrMissingError, RateLimitedError } from '@/server/github/errors'
 import {
   activityFromRaw,
   commitsTotalFromRaw,
   contributorsFromRaw,
+  countTreeFiles,
   createLanguageResolver,
   filesFromTree,
   healthFrom,
@@ -50,6 +53,12 @@ export interface BuildScanOptions extends GithubHttpOptions {
   statsRetry?: Partial<RetryOptions>
   /** Injectable clock so tests can pin "commit in the last 30 days". */
   now?: Date
+  /**
+   * Progress observer for the scan sweep. Called at real pipeline
+   * boundaries; observers must never break the scan, and any throw
+   * from a callback is contained.
+   */
+  onStage?: (event: ScanStageEvent) => void
 }
 
 function anyRateLimitedError(results: PromiseSettledResult<unknown>[]): RateLimitedError | null {
@@ -69,6 +78,29 @@ function statsMissing<T>(result: PromiseSettledResult<StatsOutcome<T>>): boolean
   if (result.status === 'fulfilled') return result.value.kind === 'pending'
   // Rejected stats endpoints (network, 5xx) leave the numbers unknown too.
   return true
+}
+
+/**
+ * Publishes one progress event at a real pipeline boundary. A throwing
+ * observer is contained: the scan outcome is never changed by it.
+ */
+function emitStage(
+  onStage: BuildScanOptions['onStage'],
+  stage: ScanStageName,
+  files?: number,
+): void {
+  if (!onStage) return
+  const event: ScanStageEvent = {
+    stage,
+    index: scanStageIndexOf(stage),
+    total: SCAN_STAGE_TOTAL,
+    ...(files === undefined ? {} : { files }),
+  }
+  try {
+    onStage(event)
+  } catch {
+    // Observers must not break the scan.
+  }
 }
 
 export async function buildScan(owner: string, repo: string, options: BuildScanOptions = {}): Promise<Scan> {
@@ -91,9 +123,18 @@ export async function buildScan(owner: string, repo: string, options: BuildScanO
 
   const [treeResult, languagesResult, activityResult, contributorsResult, communityResult] =
     await Promise.allSettled([
-      getTree(ref, branch, options),
-      getLanguages(ref, options),
-      getCommitActivity(ref, { ...options, retry: options.statsRetry }),
+      getTree(ref, branch, options).then((tree) => {
+        emitStage(options.onStage, 'tree', countTreeFiles(tree.tree))
+        return tree
+      }),
+      getLanguages(ref, options).then((raw) => {
+        emitStage(options.onStage, 'languages')
+        return raw
+      }),
+      getCommitActivity(ref, { ...options, retry: options.statsRetry }).then((weeks) => {
+        emitStage(options.onStage, 'activity')
+        return weeks
+      }),
       getContributorStats(ref, { ...options, retry: options.statsRetry }),
       getCommunityProfile(ref, options),
     ])
@@ -153,6 +194,7 @@ export async function buildScan(owner: string, repo: string, options: BuildScanO
     community,
     now,
   })
+  emitStage(options.onStage, 'health')
 
   return {
     owner: repoData.owner.login,

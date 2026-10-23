@@ -13,7 +13,7 @@ const LAYOUTS: { id: LayoutName; label: string; desc: string }[] = [
   {
     id: 'files',
     label: 'Files',
-    desc: '24×10 centered grid, fg color with 0.85 opacity.',
+    desc: '24×10 centered grid, language-coded colors (c1..c5, fg when no languages) with 0.85 opacity.',
   },
   {
     id: 'languages',

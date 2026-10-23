@@ -1,39 +1,36 @@
 import { Suspense } from 'react'
-import Link from 'next/link'
+import type { Metadata } from 'next'
+
+import { ScanScreen } from '@/features/scan-screen/scan-screen'
 import styles from './scan.module.css'
 
-export const metadata = {
+/**
+ * The scan screen page. The shell prerenders with a static pending
+ * line inside Suspense; the per-owner/repo slice resolves the params
+ * and mounts the client screen (the same pattern the report page
+ * uses). No invented progress in the fallback: params resolve too
+ * fast for a placeholder field to matter.
+ */
+
+export const metadata: Metadata = {
   title: 'Scan — Stipple',
 }
 
-export default function ScanPage({ params }: PageProps<'/scan/[owner]/[repo]'>) {
+interface ScanParams {
+  params: Promise<{ owner: string; repo: string }>
+}
+
+export default function ScanPage({ params }: ScanParams) {
   return (
     <div className={styles.wrap}>
-      <div className="shell">
-        <Suspense fallback={<p className={styles.pending}>Reading repo name…</p>}>
-          <ScanTitle params={params} />
-        </Suspense>
-      </div>
+      <Suspense fallback={<p className={`type-section ${styles.pending}`}>Opening the scan…</p>}>
+        <ScanContent params={params} />
+      </Suspense>
     </div>
   )
 }
 
-async function ScanTitle({
-  params,
-}: {
-  params: PageProps<'/scan/[owner]/[repo]'>['params']
-}) {
+async function ScanContent({ params }: ScanParams) {
   const { owner, repo } = await params
-
-  return (
-    <>
-      <h1 className="type-section">Scanning {owner}/{repo}</h1>
-      <p className={styles.note}>
-        The scan screen isn&apos;t ready yet — it arrives with the report and scan flow phase.{' '}
-        <Link href="/" className={styles.back}>
-          Back to the home page
-        </Link>
-      </p>
-    </>
-  )
+  return <ScanScreen owner={owner} repo={repo} />
 }

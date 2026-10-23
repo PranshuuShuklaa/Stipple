@@ -17,6 +17,7 @@ import {
 import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 import { PointerWakeEffect } from './effects/pointer-wake'
 import { ShockwaveEffect } from './effects/shockwave'
+import { SweepEffect, type SweepMode } from './effects/sweep'
 
 export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
 
@@ -141,6 +142,8 @@ export class DotEngine {
   // Effects: pointer wake (physics spring) and click shockwave
   private pointerWake = new PointerWakeEffect()
   private shockwave = new ShockwaveEffect()
+  // Scan sweep: gray-held dots, line and shimmer (loading screen only)
+  private sweep = new SweepEffect()
   private pointerX = -9999
   private pointerY = -9999
   // Most recent pointerdown position (canvas-local) — default morph origin
@@ -190,6 +193,7 @@ export class DotEngine {
       typeof window !== 'undefined' &&
       typeof window.matchMedia === 'function' &&
       window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    this.sweep.setReducedMotion(reducedMotion)
     this.quality = new TierController(reducedMotion)
     this.qualityTier = QUALITY_TIERS[this.quality.getTier()]
 
@@ -366,6 +370,7 @@ export class DotEngine {
   private handleReducedMotionChange(): void {
     if (this.isDestroyed || !this.reducedMotionQuery) return
     this.quality.setReducedMotion(this.reducedMotionQuery.matches)
+    this.sweep.setReducedMotion(this.reducedMotionQuery.matches)
     // Accessibility change: reduced motion may bypass the cooldown to reach Low
     this.evaluateQuality(performance.now(), this.reducedMotionQuery.matches)
   }
@@ -603,6 +608,38 @@ export class DotEngine {
     this.render()
   }
 
+  /**
+   * Swaps the underlying scan without losing the field: when the dot
+   * count is unchanged (tree placeholder count = real file count) only
+   * colors and sizes retarget smoothly; otherwise the field re-blooms
+   * from the center into the new count.
+   */
+  public setScan(scan: Scan): void {
+    if (this.isDestroyed) return
+    this.rawScan = scan
+    const desired = Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP)
+    if (desired === this.dotCount) {
+      this.dotField = buildDotField(scan, this.dotCount)
+      this.scan = this.dotField.scan
+      this.morphTo(this.currentLayout)
+      return
+    }
+    this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
+    this.morphTo(this.currentLayout)
+  }
+
+  public setSweepMode(mode: SweepMode): void {
+    this.sweep.setMode(mode)
+  }
+
+  public setSweepLine(fraction: number): void {
+    this.sweep.setLine(fraction)
+  }
+
+  public getSweepLine(): number {
+    return this.sweep.getLine()
+  }
+
   private loop(): void {
     if (!this.isRunning || this.isDestroyed) return
 
@@ -656,7 +693,7 @@ export class DotEngine {
     this.evaluateNextSample = true
   }
 
-  public render(): void {
+  public render(nowMs: number = performance.now()): void {
     const ctx = this.ctx
     const n = this.dotCount
 
@@ -667,6 +704,8 @@ export class DotEngine {
     const hy = hovered !== -1 ? this.y[hovered] + this.size[hovered] / 2 : -9999
     const hasWake = this.qualityTier.effects.pointerField
     const hasShockwave = this.qualityTier.name !== 'low' && this.shockwave.getActiveCount() > 0
+    const sweepHolds = this.sweep.holdsColors()
+    const sweepShimmer = sweepHolds && this.sweep.getMode() === 'shimmer'
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -725,6 +764,23 @@ export class DotEngine {
         }
       }
 
+      // Scan sweep: hold the scan's real colors back until the line
+      // passes; the indeterminate shimmer modulates alpha otherwise.
+      if (sweepHolds) {
+        if (sweepShimmer && this.width > 0) {
+          a = Math.max(0.05, a * this.sweep.shimmerFactor(this.targetX[i] / this.width, nowMs))
+        }
+        if (!this.sweep.isRevealed(this.targetX[i] + this.targetSize[i] / 2, this.width)) {
+          ctx.fillStyle = this.sweep.grayFill(a, this.theme.dim)
+          if (radius > 0.05 && a > 0.01) {
+            ctx.beginPath()
+            ctx.arc(cx, cy, radius, 0, Math.PI * 2)
+            ctx.fill()
+          }
+          continue
+        }
+      }
+
       if (radius > 0.05 && a > 0.01) {
         ctx.fillStyle = `rgba(${this.r[i]}, ${this.g[i]}, ${this.b[i]}, ${a})`
         ctx.beginPath()
@@ -739,6 +795,8 @@ export class DotEngine {
         }
       }
     }
+
+    this.sweep.drawLine(ctx, this.width, this.height, this.theme.fg)
   }
 
   public destroy(): void {
@@ -772,6 +830,8 @@ export class DotEngine {
     }
 
     this.shockwave.destroy()
+    this.sweep.setMode('off')
+    this.sweep.setLine(0)
 
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.boundVisibilityChange)
