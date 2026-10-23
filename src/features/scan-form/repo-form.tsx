@@ -2,7 +2,7 @@
 
 import { useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
-import { parseRepoInput } from './normalize'
+import { parseRepoInput } from '@/lib/repo-input'
 import styles from './scan-form.module.css'
 
 const EMPTY_MESSAGE = 'Type a repo first, like facebook/react.'

@@ -10,7 +10,6 @@ export interface ScanFile {
 export interface ScanLanguage {
   name: string
   bytes: number
-  color?: string
 }
 
 export interface ScanActivityWeek {

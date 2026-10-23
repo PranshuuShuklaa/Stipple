@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { parseRepoInput } from '@/features/scan-form/normalize'
+import { parseRepoInput } from '@/lib/repo-input'
 
 describe('parseRepoInput', () => {
   const ok = (input: string, owner: string, repo: string) =>

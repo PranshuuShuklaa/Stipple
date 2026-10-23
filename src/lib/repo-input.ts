@@ -3,6 +3,8 @@
  * (`https://github.com/owner/repo`, with or without scheme, query,
  * fragment, extra path segments).
  * Returns null for anything that is not clearly a repo.
+ *
+ * Pure and shared: used by the scan form (client) and the API route (server).
  */
 
 export interface ParsedRepo {
@@ -13,9 +15,9 @@ export interface ParsedRepo {
 const GITHUB_URL_PREFIX = /^(?:https?:\/\/)?(?:www\.)?github\.com(?=\/|$)/i
 
 /** GitHub owner names: letters and digits, single hyphens inside. */
-const OWNER_RE = /^[A-Za-z0-9](?:-?[A-Za-z0-9])*$/ // 39 max, checked in code
+export const OWNER_RE = /^[A-Za-z0-9](?:-?[A-Za-z0-9])*$/ // 39 max, checked in code
 /** GitHub repo names: letters, digits, dots, underscores, hyphens. */
-const REPO_RE = /^[A-Za-z0-9._-]+$/
+export const REPO_RE = /^[A-Za-z0-9._-]+$/
 
 export function parseRepoInput(raw: string): ParsedRepo | null {
   const value = raw.trim()
