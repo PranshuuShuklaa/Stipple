@@ -28,6 +28,7 @@ import { ShockwaveEffect } from './effects/shockwave'
 import { SweepEffect, type SweepMode } from './effects/sweep'
 import { sampleAmbientOffset } from './effects/ambient-flow'
 import { GravityBounceEffect } from './effects/gravity'
+import { ClusterDragEffect } from './effects/drag-clusters'
 import {
   KONAMI_SEQUENCE,
   advanceKonami,
@@ -86,6 +87,8 @@ export interface DotEngineOptions {
   onLabelsOpacityChange?: (opacity: number) => void
   onLayoutChange?: (layout: LayoutName) => void
   onTierChange?: (tier: QualityTier) => void
+  /** Folder cluster offsets in canvas px, flat [x0, y0, x1, y1, ...]. */
+  onClusterOffsetsChange?: (offsets: Float32Array, activeSlot: number) => void
 }
 
 interface DotProgressTarget {
@@ -176,6 +179,10 @@ export class DotEngine {
   private gravity = new GravityBounceEffect()
   private konamiProgress = 0
   private lastKonamiKeyAt = 0
+  // Signature 9: draggable folder clusters
+  private clusterDrag = new ClusterDragEffect()
+  private folderClusterOf: Int32Array | null = null
+  private clusterOffsetsScratch = new Float32Array(0)
   // Scan sweep: gray-held dots, line and shimmer (loading screen only)
   private sweep = new SweepEffect()
   private pointerX = -9999
@@ -208,6 +215,7 @@ export class DotEngine {
   private onLabelsOpacityChange?: (opacity: number) => void
   private onLayoutChange?: (layout: LayoutName) => void
   private onTierChange?: (tier: QualityTier) => void
+  private onClusterOffsetsChange?: (offsets: Float32Array, activeSlot: number) => void
 
   // Current layout cache
   private currentLayout: LayoutName = 'files'
@@ -228,6 +236,7 @@ export class DotEngine {
     this.onLabelsOpacityChange = options.onLabelsOpacityChange
     this.onLayoutChange = options.onLayoutChange
     this.onTierChange = options.onTierChange
+    this.onClusterOffsetsChange = options.onClusterOffsetsChange
 
     // Reduced motion forces the Low tier from the start (DESIGN.md)
     const reducedMotion =
@@ -598,6 +607,8 @@ export class DotEngine {
       }
     }
 
+    this.adoptLayoutGeometry(target)
+
     if (this.currentLayout === 'folders' && 'labels' in target) {
       this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
     }
@@ -621,6 +632,97 @@ export class DotEngine {
     }
   }
 
+  /** Keeps the drag physics geometry in sync with the current Folders layout. */
+  private adoptLayoutGeometry(target: LayoutTarget): void {
+    if (
+      'clusterOf' in target &&
+      'clusterCenters' in target &&
+      'clusterRadii' in target
+    ) {
+      const folders = target as FoldersLayoutTarget
+      this.folderClusterOf = folders.clusterOf
+      this.clusterDrag.setGeometry(
+        folders.clusterCenters,
+        folders.clusterRadii,
+        this.width,
+        this.height,
+      )
+    }
+  }
+
+  private leaveClusters(): void {
+    if (this.clusterDrag.getSlotCount() === 0 && this.folderClusterOf === null) return
+    this.folderClusterOf = null
+    this.clusterDrag.clear()
+  }
+
+  /** Signature 9: start a grab on a folder cluster. */
+  public beginClusterDrag(slot: number): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.beginDrag(slot)
+    this.emitClusterOffsets()
+  }
+
+  /** Signature 9: live drag/throw position from createDraggable. */
+  public setClusterDrag(slot: number, x: number, y: number): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.setDrag(slot, x, y)
+    this.emitClusterOffsets()
+  }
+
+  /** Signature 9: pointer released, the throw spring is still running. */
+  public releaseClusterDrag(slot: number): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.releaseDrag(slot)
+    this.emitClusterOffsets()
+  }
+
+  /** Signature 9: the throw spring has come to rest. */
+  public settleClusterDrag(slot: number): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.settleDrag(slot)
+    this.emitClusterOffsets()
+  }
+
+  /** Signature 9 keyboard alternative: nudge a focused folder label. */
+  public nudgeCluster(slot: number, dx: number, dy: number): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.nudge(slot, dx, dy)
+    this.emitClusterOffsets()
+    this.checkLoop()
+  }
+
+  /** Signature 9: send every cluster home. */
+  public resetClusters(): void {
+    if (this.isDestroyed) return
+    this.clusterDrag.reset()
+    this.emitClusterOffsets()
+    this.checkLoop()
+  }
+
+  public getClusterOffsets(): Float32Array {
+    const slots = this.clusterDrag.getSlotCount()
+    const offsets = new Float32Array(slots * 2)
+    for (let i = 0; i < slots; i++) {
+      offsets[i * 2] = this.clusterDrag.getTotalX(i)
+      offsets[i * 2 + 1] = this.clusterDrag.getTotalY(i)
+    }
+    return offsets
+  }
+
+  private emitClusterOffsets(): void {
+    const slots = this.clusterDrag.getSlotCount()
+    if (slots === 0) return
+    if (this.clusterOffsetsScratch.length !== slots * 2) {
+      this.clusterOffsetsScratch = new Float32Array(slots * 2)
+    }
+    for (let i = 0; i < slots; i++) {
+      this.clusterOffsetsScratch[i * 2] = this.clusterDrag.getTotalX(i)
+      this.clusterOffsetsScratch[i * 2 + 1] = this.clusterDrag.getTotalY(i)
+    }
+    this.onClusterOffsetsChange?.(this.clusterOffsetsScratch, this.clusterDrag.getActiveSlot())
+  }
+
   /**
    * Morph to layout with anime.js v4 driving progress and stagger from center.
    * Seamless and glitch-free under rapid switching in any direction.
@@ -632,6 +734,11 @@ export class DotEngine {
     this.onLayoutChange?.(layout)
 
     const target = this.getLayoutTarget(layout)
+    if (layout === 'folders') {
+      this.adoptLayoutGeometry(target)
+    } else {
+      this.leaveClusters()
+    }
     const picked = pickMorphOrigin(options?.origin, this.lastClick)
     // Grid stagger `from: [x, y]` expects grid fractions, not canvas pixels.
     const origin = Array.isArray(picked) ? pixelOriginToFraction(picked, this.width, this.height) : picked
@@ -785,6 +892,11 @@ export class DotEngine {
     const snapshot = this.captureSnapshot()
     this.clearCrossFade()
     const target = this.getLayoutTarget(layout)
+    if (layout === 'folders') {
+      this.adoptLayoutGeometry(target)
+    } else {
+      this.leaveClusters()
+    }
 
     for (let i = 0; i < this.dotCount; i++) {
       this.x[i] = this.targetX[i] = target.x[i]
@@ -845,6 +957,12 @@ export class DotEngine {
     this.storyDelays = this.storyTargets.slice(1).map((target) =>
       computeStoryDelays(this.dotCount, target.cols, target.rows)
     )
+    const folderIndex = this.storyLayouts.indexOf('folders')
+    if (folderIndex !== -1) {
+      this.adoptLayoutGeometry(this.storyTargets[folderIndex])
+    } else {
+      this.leaveClusters()
+    }
   }
 
   private applyStoryFrame(): void {
@@ -877,6 +995,12 @@ export class DotEngine {
     this.storyLayoutIndex = state.layoutIndex
     const layout = this.storyLayouts[state.layoutIndex]
     const target = this.storyTargets[state.layoutIndex]
+
+    if (layout && layout !== 'folders') {
+      this.leaveClusters()
+    } else if (layout === 'folders' && target && this.folderClusterOf === null) {
+      this.adoptLayoutGeometry(target)
+    }
 
     if (layout && layout !== this.currentLayout) {
       this.currentLayout = layout
@@ -1027,6 +1151,14 @@ export class DotEngine {
       )
     }
 
+    // Signature 9: reflow springs (snap on Low / reduced motion)
+    if (this.folderClusterOf !== null && this.clusterDrag.getSlotCount() > 0) {
+      const instant = this.qualityTier.name === 'low'
+      if (this.clusterDrag.update(dtMs, instant)) {
+        this.emitClusterOffsets()
+      }
+    }
+
     this.render(timestamp)
     this.rafId = requestAnimationFrame(this.loop.bind(this))
   }
@@ -1096,6 +1228,11 @@ export class DotEngine {
       !hasGravity
     const sweepHolds = this.sweep.holdsColors()
     const sweepShimmer = sweepHolds && this.sweep.isShimmering()
+    const clusterOf =
+      this.currentLayout === 'folders' && this.folderClusterOf?.length === n
+        ? this.folderClusterOf
+        : null
+    const clustersActive = clusterOf !== null && this.clusterDrag.hasOffsets()
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -1126,6 +1263,13 @@ export class DotEngine {
       // Base canvas-space center of this dot
       let cx = this.x[i] + radius
       let cy = this.y[i] + radius
+
+      // Draggable cluster offset (Signature 9)
+      if (clustersActive) {
+        const slot = clusterOf[i]
+        cx += this.clusterDrag.getTotalX(slot)
+        cy += this.clusterDrag.getTotalY(slot)
+      }
 
       // Ambient flow (High tier only, under 3 px)
       if (hasAmbient) {

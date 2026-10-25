@@ -10,6 +10,12 @@ export interface FolderLabel {
 
 export interface FoldersLayoutTarget extends LayoutTarget {
   labels: FolderLabel[]
+  /** Cluster slot (0..4) for every dot, for the draggable-cluster offsets. */
+  clusterOf: Int32Array
+  /** Flat [x0, y0, x1, y1, ...] dot centers in canvas px. */
+  clusterCenters: Float32Array
+  /** Reflow core radius per cluster in px (tighter than the visual spiral). */
+  clusterRadii: Float32Array
 }
 
 export const FOLDER_CENTERS: readonly [number, number][] = [
@@ -128,6 +134,19 @@ export function calculateFoldersLayout(
     }
   })
 
+  // Draggable-cluster geometry. The reflow core is deliberately tighter than
+  // the visual spiral so the untouched reference layout never pushes itself
+  // apart; only a cluster moved by the user displaces its neighbours.
+  const clusterCenters = new Float32Array(FOLDER_CENTERS.length * 2)
+  const clusterRadii = new Float32Array(FOLDER_CENTERS.length)
+  for (let i = 0; i < FOLDER_CENTERS.length; i++) {
+    const [qx, qy] = FOLDER_CENTERS[i]
+    clusterCenters[i * 2] = W * qx
+    clusterCenters[i * 2 + 1] = H * qy
+    clusterRadii[i] =
+      clusterCounts[i] > 0 ? 0.55 * 0.4 * P * Math.sqrt(clusterCounts[i]) + s : 0
+  }
+
   return {
     x,
     y,
@@ -140,5 +159,8 @@ export function calculateFoldersLayout(
     cols: 24,
     rows: 10,
     labels,
+    clusterOf: dotFolder,
+    clusterCenters,
+    clusterRadii,
   }
 }

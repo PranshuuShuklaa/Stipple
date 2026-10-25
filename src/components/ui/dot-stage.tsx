@@ -1,11 +1,12 @@
 'use client'
 
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback } from 'react'
-import { animate, stagger } from 'animejs'
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback, useId, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { animate, stagger, createDraggable, type Draggable } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
 import type { QualityTier } from '@/engine/quality'
 import type { FolderLabel } from '@/engine/layouts/folders'
+import { CLUSTER_SPRING } from '@/engine/effects/drag-clusters'
 import { THEME_WAVE_EVENT } from '@/lib/theme-wave'
 import styles from './dot-stage.module.css'
 
@@ -48,6 +49,9 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
   const labelsRef = useRef<HTMLDivElement>(null)
   const labelOpacityRef = useRef(1)
   const engineRef = useRef<DotEngine | null>(null)
+  const labelButtonsRef = useRef(new Map<string, HTMLButtonElement>())
+  const draggablesRef = useRef<(Draggable | null)[]>([])
+  const folderHelpId = useId()
 
   const [currentLayout, setCurrentLayout] = useState<LayoutName>(initialLayout)
   const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
@@ -78,6 +82,51 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     }),
     [currentLayout]
   )
+
+  // Signature 9: mirror engine-owned cluster offsets into the DOM transitions
+  // that createDraggable owns. The grabbed label is skipped because the pointer
+  // already drives it.
+  const applyClusterOffsets = useCallback((offsets: Float32Array, activeSlot: number) => {
+    const instances = draggablesRef.current
+    for (let slot = 0; slot < instances.length; slot++) {
+      if (slot === activeSlot) continue
+      const instance = instances[slot]
+      if (!instance) continue
+      instance.setX(offsets[slot * 2] ?? 0, true)
+      instance.setY(offsets[slot * 2 + 1] ?? 0, true)
+    }
+  }, [])
+
+  const handleLabelKeyDown = useCallback(
+    (event: ReactKeyboardEvent<HTMLButtonElement>, slot: number) => {
+      const step = event.shiftKey ? CLUSTER_SPRING.nudgePx * 4 : CLUSTER_SPRING.nudgePx
+      let dx = 0
+      let dy = 0
+      switch (event.key) {
+        case 'ArrowLeft':
+          dx = -step
+          break
+        case 'ArrowRight':
+          dx = step
+          break
+        case 'ArrowUp':
+          dy = -step
+          break
+        case 'ArrowDown':
+          dy = step
+          break
+        default:
+          return
+      }
+      event.preventDefault()
+      engineRef.current?.nudgeCluster(slot, dx, dy)
+    },
+    []
+  )
+
+  const handleResetClusters = useCallback(() => {
+    engineRef.current?.resetClusters()
+  }, [])
 
   // Calculate language distribution for legend
   const languageStats = useMemo(() => {
@@ -129,6 +178,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       onTierChange: () => {
         readEngineStats()
       },
+      onClusterOffsetsChange: applyClusterOffsets,
     })
     engineRef.current = engine
     onEngineReady?.(engine)
@@ -166,7 +216,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       engineRef.current = null
       onEngineReady?.(null)
     }
-  }, [scan, initialLayout, onLayoutChange, readEngineStats, onStageElementReady, onEngineReady])
+  }, [scan, initialLayout, onLayoutChange, readEngineStats, onStageElementReady, onEngineReady, applyClusterOffsets])
 
   // Dev-only stats polling for the overlay; tier changes broadcast via onTierChange
   useEffect(() => {
@@ -192,7 +242,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       return
     }
 
-    const elements = container.children
+    const elements = container.querySelectorAll<HTMLElement>('[data-label-text]')
     if (elements.length > 0) {
       animate(elements, {
         opacity: [0, 1],
@@ -203,6 +253,55 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       })
     }
   }, [folderLabels, labelMode])
+
+  // Signature 9: make the folder labels draggable. The engine owns the physics
+  // (reflow stars, throw, settle) and createDraggable owns the input gesture.
+  useEffect(() => {
+    const engine = engineRef.current
+    const container = containerRef.current
+    if (!engine || !container || !folderLabels || folderLabels.length === 0) {
+      draggablesRef.current = []
+      return
+    }
+
+    const instances = folderLabels.map((label, slot) => {
+      const element = labelButtonsRef.current.get(label.folder)
+      if (!element) return null
+      return createDraggable(element, {
+        container,
+        containerPadding: 8,
+        releaseStiffness: CLUSTER_SPRING.stiffness,
+        releaseDamping: CLUSTER_SPRING.damping,
+        cursor: { onHover: 'grab', onGrab: 'grabbing' },
+        onGrab: () => {
+          engine.beginClusterDrag(slot)
+        },
+        onUpdate: (draggable) => {
+          engine.setClusterDrag(slot, draggable.x, draggable.y)
+        },
+        onRelease: () => {
+          engine.releaseClusterDrag(slot)
+        },
+        onSettle: (draggable) => {
+          engine.setClusterDrag(slot, draggable.x, draggable.y)
+          engine.settleClusterDrag(slot)
+        },
+      })
+    })
+    draggablesRef.current = instances
+
+    const offsets = engine.getClusterOffsets()
+    instances.forEach((instance, slot) => {
+      if (!instance) return
+      instance.setX(offsets[slot * 2] ?? 0, true)
+      instance.setY(offsets[slot * 2 + 1] ?? 0, true)
+    })
+
+    return () => {
+      for (const instance of instances) instance?.revert()
+      draggablesRef.current = []
+    }
+  }, [folderLabels])
 
   const stageClassName = className ? `${styles.stage} ${className}` : styles.stage
 
@@ -233,21 +332,60 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         </p>
       )}
 
-      {/* Folders layout labels */}
-      <div ref={labelsRef} className={styles.labels} aria-hidden="true">
-        {folderLabels?.map((l) => (
-          <span
+      {/* Folders layout labels. Drag a label to move its cluster. */}
+      <div
+        ref={labelsRef}
+        className={styles.labels}
+        inert={currentLayout !== 'folders'}
+      >
+        {folderLabels?.map((l, slot) => (
+          <div
             key={l.folder}
-            className={styles.lab}
+            className={styles.labelAnchor}
             style={{
               left: `${l.x}px`,
               top: `${l.y}px`,
             }}
           >
-            {l.folder} ({l.count})
-          </span>
+            <button
+              type="button"
+              ref={(element) => {
+                if (element) labelButtonsRef.current.set(l.folder, element)
+                else labelButtonsRef.current.delete(l.folder)
+              }}
+              className={styles.lab}
+              aria-label={`${l.folder}, ${l.count} files. Drag to move, or use the arrow keys.`}
+              aria-describedby={folderHelpId}
+              onKeyDown={(event) => handleLabelKeyDown(event, slot)}
+            >
+              <span className={styles.labPos}>
+                <span className={styles.labText} data-label-text>
+                  {l.folder} ({l.count})
+                </span>
+              </span>
+            </button>
+          </div>
         ))}
       </div>
+
+      {folderLabels && folderLabels.length > 0 && (
+        <>
+          <p id={folderHelpId} className="visually-hidden">
+            Folder clusters can be dragged. With the keyboard, focus a folder label and use the
+            arrow keys to nudge it. Reset layout returns every cluster to its place.
+          </p>
+          <div className={styles.clusterTools}>
+            <span className={styles.clusterHint}>Drag a label to move its cluster.</span>
+            <button
+              type="button"
+              className={styles.resetButton}
+              onClick={handleResetClusters}
+            >
+              Reset layout
+            </button>
+          </div>
+        </>
+      )}
 
       {/* Hover readout top left */}
       {variant === 'full' && <p className={styles.readout} aria-live="polite">{readoutContent}</p>}

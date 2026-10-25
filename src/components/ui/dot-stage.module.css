@@ -20,14 +20,90 @@
   pointer-events: none;
 }
 
-.lab {
+.labelAnchor {
   position: absolute;
-  white-space: nowrap;
+}
+
+.lab {
+  display: block;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: none;
+  color: var(--fg);
+  font: inherit;
   font-size: 15px;
   font-weight: 600;
-  color: var(--fg);
+  line-height: 1.2;
+  white-space: nowrap;
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+  -webkit-user-select: none;
+  pointer-events: auto;
+}
+
+.lab:active {
+  cursor: grabbing;
+}
+
+.labPos {
+  display: block;
   transform: translate(-50%, -100%);
+}
+
+.labText {
+  display: inline-block;
+  will-change: transform, opacity;
+}
+
+.lab:focus-visible {
+  outline: none;
+}
+
+.lab:focus-visible .labPos {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: 4px;
+  border-radius: 3px;
+}
+
+.clusterTools {
+  position: absolute;
+  right: 20px;
+  bottom: 14px;
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  color: var(--dim);
+  font-size: 14px;
+  line-height: 1.4;
+}
+
+.clusterHint {
   pointer-events: none;
+}
+
+.resetButton {
+  margin: 0;
+  padding: 6px 12px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--fg);
+  font: inherit;
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 1.2;
+  cursor: pointer;
+}
+
+.resetButton:hover {
+  border-color: var(--fg);
+}
+
+.resetButton:focus-visible {
+  outline: var(--focus-width) solid var(--focus-color);
+  outline-offset: 2px;
 }
 
 .readout {

@@ -245,6 +245,23 @@ describe('Folders Layout Math', () => {
     expect(labelSum).toBe(240)
   })
 
+  it('exposes drag geometry for all five clusters', () => {
+    const scan = createScanFixture('stipple/stipple')
+    const layout = calculateFoldersLayout(scan, { width: 960, height: 540 }, theme)
+
+    expect(layout.clusterOf.length).toBe(layout.dotCount)
+    expect(layout.clusterCenters.length).toBe(FOLDER_CENTERS.length * 2)
+    expect(layout.clusterRadii.length).toBe(FOLDER_CENTERS.length)
+
+    for (let slot = 0; slot < FOLDER_CENTERS.length; slot++) {
+      const total = Array.from(layout.clusterOf).filter((value) => value === slot).length
+      expect(total).toBe(layout.labels[slot].count)
+      expect(layout.clusterRadii[slot]).toBeGreaterThan(0)
+      expect(Number.isFinite(layout.clusterCenters[slot * 2])).toBe(true)
+      expect(Number.isFinite(layout.clusterCenters[slot * 2 + 1])).toBe(true)
+    }
+  })
+
   it('contains no NaN, valid spiral positions and valid label coordinates', () => {
     const W = 960
     const H = 540
