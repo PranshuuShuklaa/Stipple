@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useRef, type RefObject } from 'react'
 import { resolveThemeColors } from '@/engine/colors'
+import { THEME_WAVE_EVENT } from '@/lib/theme-wave'
 import type { ScoreBandName } from './badge-svg'
 import {
   buildCollapseTargets,
@@ -261,6 +262,9 @@ export function useLinkForge({
         attributeFilter: ['class', 'style', 'data-theme'],
       })
     }
+    // The theme toggle repaints synchronously before the browser captures
+    // the incoming View Transition snapshot.
+    window.addEventListener(THEME_WAVE_EVENT, replan)
 
     const schemeQuery = window.matchMedia('(prefers-color-scheme: dark)')
     schemeQuery.addEventListener('change', replan)
@@ -277,6 +281,7 @@ export function useLinkForge({
       cancelTimeline()
       resizeObserver.disconnect()
       themeObserver?.disconnect()
+      window.removeEventListener(THEME_WAVE_EVENT, replan)
       schemeQuery.removeEventListener('change', replan)
       document.removeEventListener('visibilitychange', onVisibility)
       image.removeEventListener('load', onImageLoad)

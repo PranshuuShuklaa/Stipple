@@ -6,6 +6,7 @@ import type { Scan } from '@/lib/types/scan'
 import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
 import type { QualityTier } from '@/engine/quality'
 import type { FolderLabel } from '@/engine/layouts/folders'
+import { THEME_WAVE_EVENT } from '@/lib/theme-wave'
 import styles from './dot-stage.module.css'
 
 export interface DotStageProps {
@@ -143,6 +144,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     })
     observer.observe(document.documentElement, { attributes: true })
 
+    // The theme toggle dispatches this synchronously inside the View
+    // Transition update, so the new canvas frame is already painted when the
+    // browser captures the incoming page snapshot.
+    const handleThemeWave = () => {
+      engine.updateTheme(undefined, { instant: true })
+    }
+    window.addEventListener(THEME_WAVE_EVENT, handleThemeWave)
+
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleMediaChange = () => {
       engine.updateTheme()
@@ -151,6 +160,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
 
     return () => {
       observer.disconnect()
+      window.removeEventListener(THEME_WAVE_EVENT, handleThemeWave)
       mediaQuery.removeEventListener('change', handleMediaChange)
       engine.destroy()
       engineRef.current = null

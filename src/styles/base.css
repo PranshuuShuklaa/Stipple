@@ -206,3 +206,22 @@ h3 {
     display: none;
   }
 }
+
+/*
+ * Theme switch wave (DESIGN.md signature 12). The theme-toggle starts a
+ * View Transition and animates the new snapshot's clip-path from the
+ * button outward. The old page stays still underneath.
+ */
+@supports (view-transition-name: root) {
+  ::view-transition-old(root),
+  ::view-transition-new(root) {
+    animation: none;
+    mix-blend-mode: normal;
+  }
+
+  ::view-transition-new(root) {
+    clip-path: circle(
+      0px at var(--theme-wave-x, 50%) var(--theme-wave-y, 50%)
+    );
+  }
+}

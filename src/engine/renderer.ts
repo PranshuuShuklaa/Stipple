@@ -26,6 +26,13 @@ import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 import { PointerWakeEffect } from './effects/pointer-wake'
 import { ShockwaveEffect } from './effects/shockwave'
 import { SweepEffect, type SweepMode } from './effects/sweep'
+import { sampleAmbientOffset } from './effects/ambient-flow'
+import { GravityBounceEffect } from './effects/gravity'
+import {
+  KONAMI_SEQUENCE,
+  advanceKonami,
+  isTypingTarget,
+} from './effects/konami'
 
 export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
 
@@ -163,12 +170,19 @@ export class DotEngine {
   // Effects: pointer wake (physics spring) and click shockwave
   private pointerWake = new PointerWakeEffect()
   private shockwave = new ShockwaveEffect()
+  // Signature 11: slow ambient offset; High tier only
+  private ambientScratch = new Float32Array(2)
+  // Signature 13: hidden Konami gravity/bounce reward
+  private gravity = new GravityBounceEffect()
+  private konamiProgress = 0
+  private lastKonamiKeyAt = 0
   // Scan sweep: gray-held dots, line and shimmer (loading screen only)
   private sweep = new SweepEffect()
   private pointerX = -9999
   private pointerY = -9999
   // Most recent pointerdown position (canvas-local) — default morph origin
   private lastClick: [number, number] | null = null
+  private lastFrameAt = 0
 
   // Observers & event listeners
   private resizeObserver: ResizeObserver | null = null
@@ -181,6 +195,7 @@ export class DotEngine {
   private boundPointerDown: (e: PointerEvent) => void
   private boundPointerUp: (e: PointerEvent) => void
   private boundPointerCancel: () => void
+  private boundKeyDown: (e: KeyboardEvent) => void
   private boundReducedMotionChange: (() => void) | null = null
 
   // Spatial grid for O(1) hover queries
@@ -236,8 +251,10 @@ export class DotEngine {
     this.boundPointerDown = this.handlePointerDown.bind(this)
     this.boundPointerUp = this.handlePointerUp.bind(this)
     this.boundPointerCancel = this.handlePointerCancel.bind(this)
+    this.boundKeyDown = this.handleKeyDown.bind(this)
     this.setupObservers()
     this.setupPointerListeners()
+    this.setupKeyboardListener()
 
     // Start loop
     this.checkLoop()
@@ -312,6 +329,7 @@ export class DotEngine {
 
     this.progressTargets = Array.from({ length: n }, () => ({ p: 1 }))
     this.pointerWake.allocate(n)
+    this.gravity.allocate(n)
 
     this.hoveredIndex = -1
     this.onHoverChange?.(null)
@@ -414,6 +432,54 @@ export class DotEngine {
     this.canvas.addEventListener('pointercancel', this.boundPointerCancel)
   }
 
+  private setupKeyboardListener(): void {
+    if (typeof window === 'undefined') return
+    window.addEventListener('keydown', this.boundKeyDown)
+  }
+
+  /**
+   * Signature 13: a silent matcher. It never prevents default, never shows a
+   * hint, and stays off on the Low tier or while form fields have focus.
+   */
+  private handleKeyDown(e: KeyboardEvent): void {
+    if (this.isDestroyed || e.repeat) return
+    if (e.ctrlKey || e.metaKey || e.altKey) return
+    if (!this.qualityTier.effects.perFrameEffects) {
+      this.konamiProgress = 0
+      return
+    }
+    if (isTypingTarget(e.target)) {
+      this.konamiProgress = 0
+      return
+    }
+
+    const now = performance.now()
+    const sinceLastKey = this.lastKonamiKeyAt > 0 ? now - this.lastKonamiKeyAt : 0
+    this.lastKonamiKeyAt = now
+    this.konamiProgress = advanceKonami(
+      this.konamiProgress,
+      e.key,
+      sinceLastKey,
+    )
+
+    if (this.konamiProgress === KONAMI_SEQUENCE.length) {
+      this.konamiProgress = 0
+      this.triggerKonami()
+    }
+  }
+
+  private triggerKonami(): void {
+    if (
+      this.isDestroyed ||
+      !this.qualityTier.effects.perFrameEffects ||
+      !this.isIntersecting ||
+      !this.isPageVisible
+    ) {
+      return
+    }
+    this.gravity.trigger()
+  }
+
   private handlePointerMove(e: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect()
     const qx = e.clientX - rect.left
@@ -496,9 +562,11 @@ export class DotEngine {
     const shouldRun = this.isIntersecting && this.isPageVisible && !this.isDestroyed
     if (shouldRun && !this.isRunning) {
       this.isRunning = true
+      this.lastFrameAt = 0
       this.rafId = requestAnimationFrame(this.loop.bind(this))
     } else if (!shouldRun && this.isRunning) {
       this.isRunning = false
+      this.lastFrameAt = 0
       if (this.rafId !== null) {
         cancelAnimationFrame(this.rafId)
         this.rafId = null
@@ -854,7 +922,7 @@ export class DotEngine {
     this.crossFadeAlpha = 1
   }
 
-  public updateTheme(theme?: ThemeColors): void {
+  public updateTheme(theme?: ThemeColors, options?: { instant?: boolean }): void {
     this.theme = theme ?? resolveThemeColors(this.container)
 
     if (this.storyMode && this.storyTargets.length >= 2) {
@@ -869,7 +937,12 @@ export class DotEngine {
       this.targetR[i] = target.r[i]
       this.targetG[i] = target.g[i]
       this.targetB[i] = target.b[i]
-      if (this.progressTargets[i].p >= 1) {
+      if (options?.instant || this.progressTargets[i].p >= 1) {
+        // The view-transition snapshot must capture the new palette, and a
+        // mid-morph theme change should not keep stale colors underneath it.
+        this.startR[i] = target.r[i]
+        this.startG[i] = target.g[i]
+        this.startB[i] = target.b[i]
         this.r[i] = target.r[i]
         this.g[i] = target.g[i]
         this.b[i] = target.b[i]
@@ -921,6 +994,10 @@ export class DotEngine {
     if (!this.isRunning || this.isDestroyed) return
 
     const timestamp = performance.now()
+    const dtMs =
+      this.lastFrameAt > 0 ? Math.max(0, timestamp - this.lastFrameAt) : 0
+    this.lastFrameAt = timestamp
+
     const sample = this.fpsMeter.record(timestamp)
     if (sample !== null) {
       this.lastMeasuredFps = sample
@@ -939,7 +1016,18 @@ export class DotEngine {
       )
     }
 
-    this.render()
+    if (this.gravity.isActive()) {
+      this.gravity.update(
+        dtMs,
+        this.x,
+        this.y,
+        this.size,
+        this.dotCount,
+        this.height,
+      )
+    }
+
+    this.render(timestamp)
     this.rafId = requestAnimationFrame(this.loop.bind(this))
   }
 
@@ -957,6 +1045,9 @@ export class DotEngine {
   private applyTier(tier: QualityTierName): void {
     this.qualityTier = QUALITY_TIERS[tier]
     publishQualityTier(this.qualityTier.name)
+    if (!this.qualityTier.effects.perFrameEffects) {
+      this.gravity.reset()
+    }
     // Same density as the current field: keep every typed array and any
     // in-flight morph — only pointers/effects and the tier stat change.
     // Rebuilding during a scroll would reset the whole field visually.
@@ -998,6 +1089,11 @@ export class DotEngine {
     const hy = hovered !== -1 ? this.y[hovered] + this.size[hovered] / 2 : -9999
     const hasWake = this.qualityTier.effects.pointerField
     const hasShockwave = this.qualityTier.name !== 'low' && this.shockwave.getActiveCount() > 0
+    const hasGravity = this.gravity.isActive()
+    const hasAmbient =
+      this.qualityTier.effects.ambientFlow &&
+      this.sweep.getMode() === 'off' &&
+      !hasGravity
     const sweepHolds = this.sweep.holdsColors()
     const sweepShimmer = sweepHolds && this.sweep.isShimmering()
 
@@ -1030,6 +1126,18 @@ export class DotEngine {
       // Base canvas-space center of this dot
       let cx = this.x[i] + radius
       let cy = this.y[i] + radius
+
+      // Ambient flow (High tier only, under 3 px)
+      if (hasAmbient) {
+        sampleAmbientOffset(this.ambientScratch, i, cx, cy, nowMs)
+        cx += this.ambientScratch[0]
+        cy += this.ambientScratch[1]
+      }
+
+      // Konami gravity/bounce offset (applied in addition to the base)
+      if (hasGravity) {
+        cy += this.gravity.getOffset(i)
+      }
 
       // Pointer wake spring offset (High tier only)
       if (hasWake) {
@@ -1139,6 +1247,12 @@ export class DotEngine {
     if (typeof document !== 'undefined') {
       document.removeEventListener('visibilitychange', this.boundVisibilityChange)
     }
+
+    if (typeof window !== 'undefined') {
+      window.removeEventListener('keydown', this.boundKeyDown)
+    }
+    this.konamiProgress = 0
+    this.gravity.reset()
 
     if (this.reducedMotionQuery && this.boundReducedMotionChange) {
       this.reducedMotionQuery.removeEventListener('change', this.boundReducedMotionChange)

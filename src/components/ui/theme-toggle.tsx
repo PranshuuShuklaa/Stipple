@@ -1,6 +1,14 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type MouseEvent } from 'react'
+import { readQualityTier } from '@/engine/quality-signal'
+import {
+  THEME_WAVE_EVENT,
+  shouldWaveTheme,
+  startThemeWave,
+  supportsThemeWave,
+  type ThemeWaveDetail,
+} from '@/lib/theme-wave'
 
 type Theme = 'dark' | 'light'
 const STORAGE_KEY = 'stipple-theme'
@@ -31,14 +39,38 @@ export function ThemeToggle() {
     return () => query.removeEventListener('change', sync)
   }, [])
 
-  const toggle = () => {
+  const toggle = (event: MouseEvent<HTMLButtonElement>) => {
     const next: Theme = effectiveTheme() === 'dark' ? 'light' : 'dark'
     try {
       localStorage.setItem(STORAGE_KEY, next)
     } catch {
       /* storage unavailable: theme applies for this page view only */
     }
-    document.documentElement.dataset.theme = next
+
+    const applyTheme = () => {
+      document.documentElement.dataset.theme = next
+      window.dispatchEvent(
+        new CustomEvent<ThemeWaveDetail>(THEME_WAVE_EVENT, {
+          detail: { theme: next },
+        }),
+      )
+    }
+
+    const reducedMotion = window.matchMedia(
+      '(prefers-reduced-motion: reduce)',
+    ).matches
+    const supported = supportsThemeWave()
+    if (shouldWaveTheme(readQualityTier(), reducedMotion, supported)) {
+      const rect = event.currentTarget.getBoundingClientRect()
+      startThemeWave(
+        rect.left + rect.width / 2,
+        rect.top + rect.height / 2,
+        applyTheme,
+      )
+    } else {
+      applyTheme()
+    }
+
     setLabel(`Switch to ${next === 'dark' ? 'light' : 'dark'} theme`)
   }
 
