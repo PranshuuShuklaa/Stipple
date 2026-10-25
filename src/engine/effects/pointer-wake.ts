@@ -41,36 +41,71 @@ export class PointerWakeEffect {
     size: Float32Array,
     count: number,
     pointerX: number,
-    pointerY: number
+    pointerY: number,
+    stageWidth?: number,
+    stageHeight?: number
   ): void {
-    const hasPointer = pointerX > -9000 && pointerY > -9000
     const limit = Math.min(count, this.capacity)
+    const hasPointer =
+      pointerX >= 0 &&
+      pointerY >= 0 &&
+      (stageWidth === undefined || pointerX <= stageWidth) &&
+      (stageHeight === undefined || pointerY <= stageHeight)
 
-    for (let i = 0; i < limit; i++) {
-      if (hasPointer) {
+    if (hasPointer) {
+      const minX = pointerX - 90
+      const maxX = pointerX + 90
+      const minY = pointerY - 90
+      const maxY = pointerY + 90
+
+      for (let i = 0; i < limit; i++) {
         const radius = size[i] / 2
         const dotCx = x[i] + radius
         const dotCy = y[i] + radius
-        const dx = dotCx - pointerX
-        const dy = dotCy - pointerY
-        const distSq = dx * dx + dy * dy
 
-        if (distSq < 8100 && distSq > 0.0001) {
-          // 90^2 = 8100
-          const dist = Math.sqrt(distSq)
-          const f = (1 - dist / 90) * 5
-          this.vx[i] += (dx / dist) * f
-          this.vy[i] += (dy / dist) * f
+        if (dotCx >= minX && dotCx <= maxX && dotCy >= minY && dotCy <= maxY) {
+          const dx = dotCx - pointerX
+          const dy = dotCy - pointerY
+          const distSq = dx * dx + dy * dy
+
+          if (distSq < 8100 && distSq > 0.0001) {
+            // 90^2 = 8100
+            const dist = Math.sqrt(distSq)
+            const f = (1 - dist / 90) * 5
+            this.vx[i] += (dx / dist) * f
+            this.vy[i] += (dy / dist) * f
+          }
         }
       }
+    }
 
-      // Spring-damper integration
-      this.vx[i] -= this.px[i] * 0.06
-      this.vy[i] -= this.py[i] * 0.06
-      this.vx[i] *= 0.86
-      this.vy[i] *= 0.86
-      this.px[i] += this.vx[i]
-      this.py[i] += this.vy[i]
+    // Spring-damper integration
+    for (let i = 0; i < limit; i++) {
+      if (
+        this.px[i] !== 0 ||
+        this.py[i] !== 0 ||
+        this.vx[i] !== 0 ||
+        this.vy[i] !== 0
+      ) {
+        this.vx[i] -= this.px[i] * 0.06
+        this.vy[i] -= this.py[i] * 0.06
+        this.vx[i] *= 0.86
+        this.vy[i] *= 0.86
+        this.px[i] += this.vx[i]
+        this.py[i] += this.vy[i]
+
+        if (
+          Math.abs(this.px[i]) < 0.001 &&
+          Math.abs(this.py[i]) < 0.001 &&
+          Math.abs(this.vx[i]) < 0.001 &&
+          Math.abs(this.vy[i]) < 0.001
+        ) {
+          this.px[i] = 0
+          this.py[i] = 0
+          this.vx[i] = 0
+          this.vy[i] = 0
+        }
+      }
     }
   }
 

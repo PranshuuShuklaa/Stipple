@@ -156,7 +156,10 @@ export class DotEngine {
   private boundVisibilityChange: () => void
   private boundPointerMove: (e: PointerEvent) => void
   private boundPointerLeave: () => void
+  private boundPointerOut: (e: PointerEvent) => void
   private boundPointerDown: (e: PointerEvent) => void
+  private boundPointerUp: (e: PointerEvent) => void
+  private boundPointerCancel: () => void
   private boundReducedMotionChange: (() => void) | null = null
 
   // Spatial grid for O(1) hover queries
@@ -205,7 +208,10 @@ export class DotEngine {
     this.boundVisibilityChange = this.handleVisibilityChange.bind(this)
     this.boundPointerMove = this.handlePointerMove.bind(this)
     this.boundPointerLeave = this.handlePointerLeave.bind(this)
+    this.boundPointerOut = this.handlePointerOut.bind(this)
     this.boundPointerDown = this.handlePointerDown.bind(this)
+    this.boundPointerUp = this.handlePointerUp.bind(this)
+    this.boundPointerCancel = this.handlePointerCancel.bind(this)
     this.setupObservers()
     this.setupPointerListeners()
 
@@ -378,13 +384,21 @@ export class DotEngine {
   private setupPointerListeners(): void {
     this.canvas.addEventListener('pointermove', this.boundPointerMove)
     this.canvas.addEventListener('pointerleave', this.boundPointerLeave)
+    this.canvas.addEventListener('pointerout', this.boundPointerOut)
     this.canvas.addEventListener('pointerdown', this.boundPointerDown)
+    this.canvas.addEventListener('pointerup', this.boundPointerUp)
+    this.canvas.addEventListener('pointercancel', this.boundPointerCancel)
   }
 
   private handlePointerMove(e: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect()
     const qx = e.clientX - rect.left
     const qy = e.clientY - rect.top
+
+    if (qx < 0 || qx > this.width || qy < 0 || qy > this.height) {
+      this.handlePointerLeave()
+      return
+    }
 
     this.pointerX = qx
     this.pointerY = qy
@@ -409,15 +423,38 @@ export class DotEngine {
     }
   }
 
+  private handlePointerOut(e: PointerEvent): void {
+    if (e.target === this.canvas && (e.relatedTarget === null || !this.canvas.contains(e.relatedTarget as Node))) {
+      this.handlePointerLeave()
+    }
+  }
+
   private handlePointerDown(e: PointerEvent): void {
     const rect = this.canvas.getBoundingClientRect()
     const clickX = e.clientX - rect.left
     const clickY = e.clientY - rect.top
+
+    if (clickX < 0 || clickX > this.width || clickY < 0 || clickY > this.height) {
+      return
+    }
+
+    this.pointerX = clickX
+    this.pointerY = clickY
     // Remember every click so the next morph staggers from it, on any tier
     this.lastClick = [clickX, clickY]
     // Low tier: no shockwave (DESIGN.md / REFERENCE.md)
     if (this.qualityTier.name === 'low') return
     this.shockwave.trigger(clickX, clickY)
+  }
+
+  private handlePointerUp(e: PointerEvent): void {
+    if (e.pointerType === 'touch') {
+      this.handlePointerLeave()
+    }
+  }
+
+  private handlePointerCancel(): void {
+    this.handlePointerLeave()
   }
 
   /** External API: fire a shockwave at canvas-local (x, y). Used by the intro overlay. */
@@ -657,7 +694,8 @@ export class DotEngine {
     if (this.qualityTier.effects.pointerField) {
       this.pointerWake.update(
         this.x, this.y, this.size, this.dotCount,
-        this.pointerX, this.pointerY
+        this.pointerX, this.pointerY,
+        this.width, this.height
       )
     }
 
@@ -826,7 +864,10 @@ export class DotEngine {
     if (this.canvas) {
       this.canvas.removeEventListener('pointermove', this.boundPointerMove)
       this.canvas.removeEventListener('pointerleave', this.boundPointerLeave)
+      this.canvas.removeEventListener('pointerout', this.boundPointerOut)
       this.canvas.removeEventListener('pointerdown', this.boundPointerDown)
+      this.canvas.removeEventListener('pointerup', this.boundPointerUp)
+      this.canvas.removeEventListener('pointercancel', this.boundPointerCancel)
     }
 
     this.shockwave.destroy()

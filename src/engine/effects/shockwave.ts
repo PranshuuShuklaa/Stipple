@@ -18,6 +18,7 @@ export interface ShockwaveRing {
  */
 export class ShockwaveEffect {
   private rings: ShockwaveRing[] = []
+  private scratch: [number, number] = [0, 0]
 
   public trigger(x: number, y: number, amplitude = 16, maxRadius = 500, duration = 700): void {
     const ring: ShockwaveRing = {
@@ -46,9 +47,9 @@ export class ShockwaveEffect {
 
   /**
    * Applies displacement from all active shockwave rings to point (x, y).
-   * Returns [offsetX, offsetY].
+   * Returns reusable scratch [offsetX, offsetY] array to avoid GC allocations.
    */
-  public getDisplacement(x: number, y: number): [number, number] {
+  public getDisplacement(x: number, y: number): readonly [number, number] {
     let offX = 0
     let offY = 0
 
@@ -68,7 +69,9 @@ export class ShockwaveEffect {
       }
     }
 
-    return [offX, offY]
+    this.scratch[0] = offX
+    this.scratch[1] = offY
+    return this.scratch
   }
 
   public getActiveCount(): number {

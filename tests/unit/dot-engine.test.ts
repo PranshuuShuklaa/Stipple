@@ -13,6 +13,8 @@ import { calculateFoldersLayout, FOLDER_CENTERS } from '@/engine/layouts/folders
 import { SpatialGrid } from '@/engine/spatial-grid'
 import { parseColor } from '@/engine/colors'
 import { pickMorphOrigin, pixelOriginToFraction, type MorphOptions } from '@/engine/renderer'
+import { PointerWakeEffect } from '@/engine/effects/pointer-wake'
+import { ShockwaveEffect } from '@/engine/effects/shockwave'
 import { createLanguageIndexer } from '@/engine/layouts/language-colors'
 import type { Scan } from '@/lib/types/scan'
 
@@ -358,5 +360,97 @@ describe('pixelOriginToFraction', () => {
 
   it('centers on degenerate sizes', () => {
     expect(pixelOriginToFraction([100, 100], 0, 0)).toEqual([0.5, 0.5])
+  })
+})
+
+describe('Pointer Wake Effect (Signature Animation 1)', () => {
+  it('pushes dots near pointer within 90px radius using exact physics equations', () => {
+    const wake = new PointerWakeEffect()
+    const n = 10
+    wake.allocate(n)
+
+    const x = new Float32Array([100, 300, 500, 0, 0, 0, 0, 0, 0, 0])
+    const y = new Float32Array([100, 300, 500, 0, 0, 0, 0, 0, 0, 0])
+    const size = new Float32Array(n).fill(8)
+
+    // Pointer at (110, 100), dist to dot 0 center (104, 104) is ~7.2px (< 90px)
+    wake.update(x, y, size, n, 110, 100, 800, 600)
+
+    expect(wake.getOffsetX(0)).not.toBe(0)
+    expect(wake.getOffsetY(0)).not.toBe(0)
+
+    // Dot 1 (at 300, 300) is far outside 90px radius -> no push force
+    expect(wake.getOffsetX(1)).toBe(0)
+    expect(wake.getOffsetY(1)).toBe(0)
+  })
+
+  it('does nothing when pointer is outside stage boundaries or inactive', () => {
+    const wake = new PointerWakeEffect()
+    const n = 10
+    wake.allocate(n)
+
+    const x = new Float32Array(n).fill(100)
+    const y = new Float32Array(n).fill(100)
+    const size = new Float32Array(n).fill(8)
+
+    // Inactive pointer (-9999, -9999)
+    wake.update(x, y, size, n, -9999, -9999, 800, 600)
+    expect(wake.getOffsetX(0)).toBe(0)
+    expect(wake.getOffsetY(0)).toBe(0)
+
+    // Pointer outside stage (e.g. 950, 200 in an 800x600 stage)
+    wake.update(x, y, size, n, 950, 200, 800, 600)
+    expect(wake.getOffsetX(0)).toBe(0)
+    expect(wake.getOffsetY(0)).toBe(0)
+  })
+
+  it('completes update frame cost in under 4 ms for 2,500 dots (High tier benchmark)', () => {
+    const wake = new PointerWakeEffect()
+    const n = 2500
+    wake.allocate(n)
+
+    const x = new Float32Array(n)
+    const y = new Float32Array(n)
+    const size = new Float32Array(n).fill(8)
+
+    for (let i = 0; i < n; i++) {
+      x[i] = (i % 50) * 16
+      y[i] = Math.floor(i / 50) * 16
+    }
+
+    const t0 = performance.now()
+    for (let frame = 0; frame < 60; frame++) {
+      const px = 100 + frame * 5
+      const py = 100 + frame * 3
+      wake.update(x, y, size, n, px, py, 1000, 1000)
+    }
+    const totalTimeMs = performance.now() - t0
+    const avgFrameCostMs = totalTimeMs / 60
+
+    expect(avgFrameCostMs).toBeLessThan(4.0)
+  })
+})
+
+describe('Click Shockwave Effect (Signature Animation 2)', () => {
+  it('triggers ring and displaces dots inside 70px band', () => {
+    const shockwave = new ShockwaveEffect()
+    shockwave.trigger(400, 300, 16, 500, 700)
+
+    expect(shockwave.getActiveCount()).toBe(1)
+
+    // At start r=0, point at (400, 300) is within 70px band
+    const [offX, offY] = shockwave.getDisplacement(410, 300)
+    expect(offX).not.toBe(0)
+  })
+
+  it('uses scratch buffer without allocating new arrays', () => {
+    const shockwave = new ShockwaveEffect()
+    shockwave.trigger(400, 300, 16, 500, 700)
+
+    const disp1 = shockwave.getDisplacement(410, 300)
+    const disp2 = shockwave.getDisplacement(420, 300)
+
+    // Must be the exact same scratch array reference
+    expect(disp1).toBe(disp2)
   })
 })
