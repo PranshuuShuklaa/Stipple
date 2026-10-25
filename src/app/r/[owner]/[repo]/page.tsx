@@ -7,6 +7,7 @@ import { Story } from '@/features/report/story'
 import { HealthSection } from '@/features/report/health-section'
 import { NumbersSection } from '@/features/report/numbers-section'
 import { DependenciesSection } from '@/features/report/dependencies-section'
+import { ShareSection } from '@/features/report/share-section'
 import { ReportError } from '@/features/report/report-error'
 import reportStyles from '@/features/report/report.module.css'
 import styles from './page.module.css'
@@ -22,20 +23,32 @@ interface ReportParams {
   params: Promise<{ owner: string; repo: string }>
 }
 
+function ogImagePath(owner: string, repo: string): string {
+  return `/api/og/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`
+}
+
 export async function generateMetadata({ params }: ReportParams): Promise<Metadata> {
   const { owner, repo } = await params
   const result = await getScanCached(owner, repo)
+  const ogImage = ogImagePath(owner, repo)
   if (!result.ok) {
-    return { title: `${owner}/${repo} — Stipple` }
+    return {
+      title: `${owner}/${repo} — Stipple`,
+      openGraph: { title: `${owner}/${repo} — Stipple`, images: [{ url: ogImage, width: 1200, height: 630 }] },
+      twitter: { card: 'summary_large_image' },
+    }
   }
   const scan = result.scan
   const description =
     scan.description !== ''
       ? scan.description
       : `Files, languages, activity and folders for github.com/${owner}/${repo}, drawn as a field of dots.`
+  const title = `${owner}/${repo} — Stipple`
   return {
-    title: `${owner}/${repo} — Stipple`,
+    title,
     description,
+    openGraph: { title, description, images: [{ url: ogImage, width: 1200, height: 630 }] },
+    twitter: { card: 'summary_large_image' },
   }
 }
 
@@ -80,6 +93,7 @@ async function ReportContent({ params }: ReportParams) {
         <HealthSection scan={scan} />
         <NumbersSection scan={scan} />
         <DependenciesSection scan={scan} />
+        <ShareSection scan={scan} />
       </div>
     </>
   )

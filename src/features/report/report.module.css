@@ -254,3 +254,95 @@
 .errorAction:hover {
   border-color: var(--dim);
 }
+
+/* Share */
+
+.sharePreviews {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 24px;
+  margin-bottom: 40px;
+}
+
+.previewCard {
+  background: var(--panel);
+  border-radius: 16px;
+  padding: 24px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.previewLabel {
+  font-size: 14px;
+  color: var(--dim);
+  margin: 0;
+}
+
+.copyGroups {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  max-width: 680px;
+}
+
+.copyGroup {
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.copyHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.copyTitle {
+  font-size: 15px;
+  font-weight: 600;
+  color: var(--fg);
+}
+
+.copyButton {
+  border: 1px solid var(--line);
+  background: transparent;
+  border-radius: 999px;
+  padding: 6px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--fg);
+  cursor: pointer;
+  transition: border-color 180ms ease, color 180ms ease;
+}
+
+.copyButton:hover {
+  border-color: var(--c1);
+  color: var(--c1);
+}
+
+.copyCode {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--dim);
+  word-break: break-all;
+  background: var(--bg);
+  padding: 8px 12px;
+  border-radius: 6px;
+}
+
+.copyPre {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+  font-size: 13px;
+  color: var(--dim);
+  margin: 0;
+  white-space: pre-wrap;
+  background: var(--bg);
+  padding: 12px;
+  border-radius: 6px;
+}
+
