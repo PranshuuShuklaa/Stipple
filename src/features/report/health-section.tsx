@@ -1,45 +1,73 @@
 'use client'
 
-import { useEffect, useRef } from 'react'
-import { animate, stagger } from 'animejs'
+import { useEffect, useLayoutEffect, useRef } from 'react'
+import { animate, stagger, svg } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { formatCount } from './step-headlines'
+import { RiseMask } from './rise-text'
 import { useOnceWhenVisible, useReducedMotion } from './use-once-when-visible'
 import styles from './report.module.css'
 
 /** 2 * PI * 54, the offset base REFERENCE.md fixes at 339.3. */
 const RING_CIRCUMFERENCE = 339.3
 
+const useIsomorphicLayoutEffect =
+  typeof window === 'undefined' ? useEffect : useLayoutEffect
+
+/** createDrawable writes drawing attributes; put the static ring back. */
+function restoreStaticRing(ring: SVGCircleElement, finalOffset: number) {
+  ring.setAttribute('stroke-dasharray', String(RING_CIRCUMFERENCE))
+  ring.setAttribute('stroke-dashoffset', String(finalOffset))
+  ring.removeAttribute('draw')
+  ring.removeAttribute('pathLength')
+  ring.style.removeProperty('stroke-linecap')
+}
+
 /**
- * Health: SVG ring that draws itself (1600 ms inOutExpo), a score that
- * counts up in sync (1400 ms outExpo) and checklist rows that resolve
- * one by one (REFERENCE.md "Sections under the story"). Plays once at
- * 30% visible; reduced motion keeps the drawn state the markup already
- * carries. The score number counts with the ring, never faked in SSR:
- * the markup renders the final value pre-animation.
+ * Health: SVG ring drawn with svg.createDrawable (1600 ms inOutExpo), a
+ * score that counts up in sync (1400 ms outExpo) and checklist rows that
+ * resolve one by one (REFERENCE.md "Sections under the story"). Plays once
+ * at 30% visible; reduced motion keeps the drawn state the markup already
+ * carries. The score number counts with the ring, never faked in SSR: the
+ * markup renders the final value pre-animation.
  */
 export function HealthSection({ scan }: { scan: Scan }) {
   const sectionRef = useRef<HTMLElement | null>(null)
   const ringRef = useRef<SVGCircleElement | null>(null)
   const scoreRef = useRef<HTMLSpanElement | null>(null)
   const rowsRef = useRef<HTMLUListElement | null>(null)
+  const playedRef = useRef(false)
   const visible = useOnceWhenVisible(sectionRef, 0.3)
   const reducedMotion = useReducedMotion()
 
   const score = scan.health.score
   const finalOffset = RING_CIRCUMFERENCE * (1 - score / 100)
 
+  // Keep the ring empty until it is played, so entering the section never
+  // shows a finished ring for one frame before the draw resets it.
+  useIsomorphicLayoutEffect(() => {
+    if (reducedMotion || playedRef.current) return
+    const ring = ringRef.current
+    if (!ring) return
+    svg.createDrawable(ring, 0, 0)
+    return () => {
+      restoreStaticRing(ring, finalOffset)
+    }
+  }, [reducedMotion, finalOffset])
+
   useEffect(() => {
-    if (!visible || reducedMotion) return
+    if (!visible || reducedMotion || playedRef.current) return
     const ring = ringRef.current
     const scoreNode = scoreRef.current
     if (!ring || !scoreNode) return
+    playedRef.current = true
 
+    const drawable = svg.createDrawable(ring, 0, 0)
     const tweens: { revert: () => unknown }[] = []
 
     tweens.push(
-      animate(ring, {
-        strokeDashoffset: [RING_CIRCUMFERENCE, finalOffset],
+      animate(drawable, {
+        draw: `0 ${score / 100}`,
         duration: 1600,
         ease: 'inOutExpo',
       }),
@@ -76,6 +104,7 @@ export function HealthSection({ scan }: { scan: Scan }) {
       for (const tween of tweens) {
         tween.revert()
       }
+      restoreStaticRing(ring, finalOffset)
       scoreNode.textContent = formatCount(score)
     }
   }, [visible, reducedMotion, finalOffset, score])
@@ -86,9 +115,9 @@ export function HealthSection({ scan }: { scan: Scan }) {
       aria-label={`Health score: ${score} out of 100`}
       ref={sectionRef}
     >
-      <h2 className={`type-section ${styles.sectionHeadline}`}>
+      <RiseMask className={`type-section ${styles.sectionHeadline}`}>
         Health: <span ref={scoreRef} className="tabular">{score}</span> out of 100
-      </h2>
+      </RiseMask>
       <div className={styles.healthBody}>
         <svg
           className={styles.ring}

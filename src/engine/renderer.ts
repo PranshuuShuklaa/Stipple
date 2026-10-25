@@ -21,6 +21,7 @@ import {
   type QualityTier,
   type QualityTierName,
 } from './quality'
+import { publishQualityTier } from './quality-signal'
 import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 import { PointerWakeEffect } from './effects/pointer-wake'
 import { ShockwaveEffect } from './effects/shockwave'
@@ -221,6 +222,7 @@ export class DotEngine {
     this.sweep.setReducedMotion(reducedMotion)
     this.quality = new TierController(reducedMotion)
     this.qualityTier = QUALITY_TIERS[this.quality.getTier()]
+    publishQualityTier(this.qualityTier.name)
 
     // Setup viewport & start state (center, scale 0, opacity 0)
     this.updateDimensions()
@@ -954,6 +956,7 @@ export class DotEngine {
 
   private applyTier(tier: QualityTierName): void {
     this.qualityTier = QUALITY_TIERS[tier]
+    publishQualityTier(this.qualityTier.name)
     // Same density as the current field: keep every typed array and any
     // in-flight morph — only pointers/effects and the tier stat change.
     // Rebuilding during a scroll would reset the whole field visually.

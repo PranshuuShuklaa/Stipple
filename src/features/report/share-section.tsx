@@ -3,6 +3,7 @@
 import { useState, useRef, useEffect } from 'react'
 import { animate } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
+import { RiseText } from './rise-text'
 import { useOnceWhenVisible, useReducedMotion } from './use-once-when-visible'
 import {
   getSiteUrl,
@@ -14,6 +15,9 @@ import {
   buildSummaryMarkdown,
   copyToClipboard,
 } from '@/features/share/markdown'
+import { scoreBand } from '@/features/share/badge-svg'
+import { LinkForge, type LinkForgeHandle } from '@/features/share/link-forge'
+import { useQualityTier } from './use-quality-tier'
 import styles from './report.module.css'
 
 /**
@@ -24,50 +28,111 @@ import styles from './report.module.css'
 export function ShareSection({ scan }: { scan: Scan }) {
   const sectionRef = useRef<HTMLElement | null>(null)
   const badgePreviewRef = useRef<HTMLDivElement | null>(null)
+  const badgeImageRef = useRef<HTMLImageElement | null>(null)
+  const forgeRef = useRef<LinkForgeHandle | null>(null)
+  const copyTimerRef = useRef<number | null>(null)
+  const copiedButtonRef = useRef<HTMLButtonElement | null>(null)
   const visible = useOnceWhenVisible(sectionRef, 0.3)
   const reducedMotion = useReducedMotion()
+  const quality = useQualityTier()
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copyPulse, setCopyPulse] = useState(0)
   const [siteUrl] = useState(() => getSiteUrl())
 
-  useEffect(() => {
-    if (!visible || reducedMotion) return
-    const badgeEl = badgePreviewRef.current
-    if (!badgeEl) return
+  const plainMotion = reducedMotion || quality === 'low'
+  const motionEnabled = !plainMotion
+  const motionEnabledRef = useRef(motionEnabled)
 
-    const tween = animate(badgeEl, {
-      scale: [0.7, 1],
-      opacity: [0, 1],
-      duration: 900,
-      ease: 'outElastic(1, 0.6)',
+  useEffect(() => {
+    motionEnabledRef.current = motionEnabled
+  }, [motionEnabled])
+
+  useEffect(() => {
+    return () => {
+      if (copyTimerRef.current !== null) {
+        window.clearTimeout(copyTimerRef.current)
+      }
+    }
+  }, [])
+
+  useEffect(() => {
+    if (copyPulse === 0 || !motionEnabledRef.current) return
+    const button = copiedButtonRef.current
+    if (!button) return
+
+    const frame = window.requestAnimationFrame(() => {
+      forgeRef.current?.burst(button)
     })
+
+    return () => {
+      window.cancelAnimationFrame(frame)
+    }
+  }, [copyPulse])
+
+  useEffect(() => {
+    if (!visible) return
+    const previews = badgePreviewRef.current
+    if (!previews) return
+
+    const tween = animate(
+      previews,
+      plainMotion
+        ? { opacity: [0, 1], duration: 300, ease: 'linear' }
+        : {
+            scale: [0.7, 1],
+            opacity: [0, 1],
+            duration: 900,
+            ease: 'outElastic(1, 0.6)',
+          },
+    )
 
     return () => {
       tween.revert()
     }
-  }, [visible, reducedMotion])
+  }, [visible, plainMotion])
 
   const reportUrl = getReportUrl(scan.owner, scan.name, siteUrl)
   const badgeApiUrl = getBadgeApiUrl(scan.owner, scan.name, siteUrl)
   const cardApiUrl = getCardApiUrl(scan.owner, scan.name, siteUrl)
+  const band = scoreBand(scan.health.score).name
 
   const badgeMarkdown = buildBadgeMarkdown(scan.owner, scan.name, siteUrl)
   const cardMarkdown = buildCardMarkdown(scan.owner, scan.name, siteUrl)
   const summaryBlock = buildSummaryMarkdown(scan, siteUrl)
 
-  const handleCopy = async (key: string, text: string) => {
+  const handleCopy = async (
+    key: string,
+    text: string,
+    button: HTMLButtonElement,
+  ) => {
     const success = await copyToClipboard(text)
-    if (success) {
-      setCopiedKey(key)
-      setTimeout(() => {
-        setCopiedKey((curr) => (curr === key ? null : curr))
-      }, 1600)
+    if (!success) return
+
+    copiedButtonRef.current = button
+    setCopiedKey(key)
+    if (copyTimerRef.current !== null) {
+      window.clearTimeout(copyTimerRef.current)
+    }
+    copyTimerRef.current = window.setTimeout(() => {
+      setCopiedKey((curr) => (curr === key ? null : curr))
+      copyTimerRef.current = null
+    }, 1600)
+
+    if (motionEnabled) {
+      setCopyPulse((value) => value + 1)
     }
   }
 
   return (
     <section id="share" ref={sectionRef} className={styles.shareSection}>
-      <h2 className={`type-section ${styles.sectionHeadline}`}>Share.</h2>
+      <LinkForge
+        ref={forgeRef}
+        badgeRef={badgeImageRef}
+        active={visible && motionEnabled}
+        band={band}
+      />
+      <RiseText text="Share." className={`type-section ${styles.sectionHeadline}`} />
       <p className={styles.sectionBody}>
         Embed this repo&apos;s live health badge and animated card in your README, or share the story link.
       </p>
@@ -77,7 +142,12 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <p className={styles.previewLabel}>Health badge</p>
           <a href={reportUrl} target="_blank" rel="noopener noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={badgeApiUrl} alt={`${scan.owner}/${scan.name} Stipple health badge`} />
+            <img
+              ref={badgeImageRef}
+              className={styles.badgeImage}
+              src={badgeApiUrl}
+              alt={`${scan.owner}/${scan.name} Stipple health badge`}
+            />
           </a>
         </div>
         <div className={styles.previewCard}>
@@ -96,7 +166,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={() => handleCopy('link', reportUrl)}
+              onClick={(event) => handleCopy('link', reportUrl, event.currentTarget)}
             >
               {copiedKey === 'link' ? 'Copied' : 'Copy link'}
             </button>
@@ -110,7 +180,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={() => handleCopy('badge', badgeMarkdown)}
+              onClick={(event) =>
+                handleCopy('badge', badgeMarkdown, event.currentTarget)
+              }
             >
               {copiedKey === 'badge' ? 'Copied' : 'Copy badge'}
             </button>
@@ -124,7 +196,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={() => handleCopy('card', cardMarkdown)}
+              onClick={(event) =>
+                handleCopy('card', cardMarkdown, event.currentTarget)
+              }
             >
               {copiedKey === 'card' ? 'Copied' : 'Copy card'}
             </button>
@@ -138,7 +212,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={() => handleCopy('summary', summaryBlock)}
+              onClick={(event) =>
+                handleCopy('summary', summaryBlock, event.currentTarget)
+              }
             >
               {copiedKey === 'summary' ? 'Copied' : 'Copy summary'}
             </button>

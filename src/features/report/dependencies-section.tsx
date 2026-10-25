@@ -4,6 +4,7 @@ import { useEffect, useRef } from 'react'
 import { animate, stagger } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { formatCount } from './step-headlines'
+import { RiseText } from './rise-text'
 import { useOnceWhenVisible, useReducedMotion } from './use-once-when-visible'
 import styles from './report.module.css'
 
@@ -40,7 +41,7 @@ export function DependenciesSection({ scan }: { scan: Scan }) {
 
   return (
     <section id="dependencies" ref={sectionRef}>
-      <h2 className={`type-section ${styles.sectionHeadline}`}>Dependencies.</h2>
+      <RiseText text="Dependencies." className={`type-section ${styles.sectionHeadline}`} />
       {chips.length === 0 ? (
         <p className={styles.sectionBody}>
           No dependency manifest at the repo root. Stipple reads package.json, requirements.txt,

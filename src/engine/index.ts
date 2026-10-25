@@ -10,6 +10,7 @@ export {
   type QualityEffects,
   type TierEvaluation,
 } from './quality'
+export { publishQualityTier, readQualityTier, subscribeQualityTier } from './quality-signal'
 export { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
 export { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewport } from './layouts/files'
 export { calculateLanguagesLayout } from './layouts/languages'

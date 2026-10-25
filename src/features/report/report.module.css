@@ -95,6 +95,29 @@
   margin: 0 0 24px;
 }
 
+/* Masked line rise: splitText wraps every line in a clipped span. The
+ * padding keeps descenders visible at rest; the negative margin keeps the
+ * line rhythm unchanged. */
+.riseContent {
+  display: block;
+}
+
+.riseContent > span {
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+}
+
+.riseMask {
+  display: block;
+  overflow: clip;
+  padding-block: 0.2em;
+  margin-block: -0.2em;
+}
+
+.riseInner {
+  display: block;
+}
+
 .sectionBody {
   max-width: 60ch;
   color: var(--dim);
@@ -257,6 +280,10 @@
 
 /* Share */
 
+.shareSection {
+  position: relative;
+}
+
 .sharePreviews {
   display: flex;
   flex-wrap: wrap;
@@ -272,12 +299,20 @@
   flex-direction: column;
   align-items: center;
   gap: 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .previewLabel {
   font-size: 14px;
   color: var(--dim);
   margin: 0;
+}
+
+.badgeImage {
+  display: block;
+  width: 268px;
+  height: auto;
 }
 
 .copyGroups {
