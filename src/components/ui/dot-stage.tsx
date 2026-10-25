@@ -22,6 +22,8 @@ export interface DotStageProps {
   onStageElementReady?: (el: HTMLDivElement) => void
   /** Reports the dot engine (null on unmount) — e.g. so the intro can read the real quality tier. */
   onEngineReady?: (engine: DotEngine | null) => void
+  /** 'scrub' lets the dot engine drive label opacity for scroll-linked story frames. */
+  labelMode?: 'animate' | 'scrub'
 }
 
 export interface DotStageHandle {
@@ -37,12 +39,13 @@ function formatBytes(bytes: number): string {
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady },
+  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady, labelMode = 'animate' },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const labelsRef = useRef<HTMLDivElement>(null)
+  const labelOpacityRef = useRef(1)
   const engineRef = useRef<DotEngine | null>(null)
 
   const [currentLayout, setCurrentLayout] = useState<LayoutName>(initialLayout)
@@ -114,6 +117,10 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       onLabelsChange: (labels) => {
         setFolderLabels(labels)
       },
+      onLabelsOpacityChange: (opacity) => {
+        labelOpacityRef.current = opacity
+        if (labelsRef.current) labelsRef.current.style.opacity = String(opacity)
+      },
       onLayoutChange: (layout) => {
         setCurrentLayout(layout)
         onLayoutChange?.(layout)
@@ -158,16 +165,24 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     return () => window.clearInterval(interval)
   }, [isDev, showDevOverlay, readEngineStats])
 
-  // Animate folder labels on entry
+  // Animate folder labels on entry, or let the scroll timeline scrub them
   useEffect(() => {
     if (!folderLabels || folderLabels.length === 0 || !labelsRef.current) return
 
+    const container = labelsRef.current
     const reducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)').matches
+
+    if (labelMode === 'scrub') {
+      container.style.opacity = reducedMotion ? '1' : String(labelOpacityRef.current)
+      return
+    }
+
+    container.style.opacity = '1'
     if (reducedMotion) {
       return
     }
 
-    const elements = labelsRef.current.children
+    const elements = container.children
     if (elements.length > 0) {
       animate(elements, {
         opacity: [0, 1],
@@ -177,7 +192,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         ease: 'outQuad',
       })
     }
-  }, [folderLabels])
+  }, [folderLabels, labelMode])
 
   const stageClassName = className ? `${styles.stage} ${className}` : styles.stage
 

@@ -4,7 +4,7 @@ import {
   SCAN_MAX_WAIT_MS,
   SCAN_REVEAL_MS,
   SCAN_STAGES,
-  scanStageCap,
+  scanLineMilestone,
   scanStageIndexOf,
   type ScanStageName,
 } from '@/lib/scan-stages'
@@ -20,9 +20,10 @@ export const SCAN_FLOW = {
   fallbackAfterMs: SCAN_FALLBACK_AFTER_MS,
   maxWaitMs: SCAN_MAX_WAIT_MS,
   revealMs: SCAN_REVEAL_MS,
-  /** Slow forward creep of the sweep line while waiting for events. */
-  creepPerMs: 0.000055,
-  creepStart: 0.02,
+  /** Slow creep toward the next stage: covers ~63% of the gap in this long. */
+  creepTauMs: 2600,
+  /** The creep stops a hair short of the boundary so waiting never unlocks it. */
+  creepLimit: 0.999,
 } as const
 
 export type ScanScreenPhase = 'streaming' | 'fallback' | 'revealing' | 'error'
@@ -162,14 +163,20 @@ export function scanFlowMessage(state: ScanFlowState, owner: string, repo: strin
 }
 
 /**
- * Sweep math. While waiting the line creeps forward but can never pass
- * the cap of the completed stages — with no data, the line can never
- * finish (caps all stay below 1). The reveal runs to the full width in
- * SCAN_REVEAL_MS once the data is on screen, easeOutQuad.
+ * Sweep math. The line sits on the milestone of the stages that really
+ * completed (`waitedMs` = 0), then creeps into the gap toward the next
+ * stage's milestone. The approach is asymptotic and capped just below
+ * the boundary, so no amount of waiting can cross it: only the stage
+ * event can advance the line. After the fourth stage the line holds and
+ * the color reveal runs to the full width in SCAN_REVEAL_MS, easeOutQuad.
  */
-export function sweepCreepTarget(elapsedMs: number, stagesCompleted: number): number {
-  const elapsed = Math.max(0, elapsedMs)
-  return Math.min(scanStageCap(stagesCompleted), SCAN_FLOW.creepStart + SCAN_FLOW.creepPerMs * elapsed)
+export function sweepLineTarget(stagesCompleted: number, waitedMs: number): number {
+  const floor = scanLineMilestone(stagesCompleted)
+  const boundary = scanLineMilestone(stagesCompleted + 1)
+  if (boundary <= floor) return floor
+  const waited = Number.isNaN(waitedMs) ? 0 : Math.max(0, waitedMs)
+  const approach = Math.min(SCAN_FLOW.creepLimit, 1 - Math.exp(-waited / SCAN_FLOW.creepTauMs))
+  return floor + (boundary - floor) * approach
 }
 
 export function sweepRevealFraction(elapsedMs: number, fromFrac: number): number {

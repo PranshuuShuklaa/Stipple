@@ -16,7 +16,7 @@ import {
   initialScanFlowState,
   processScanFlowEvent,
   scanFlowMessage,
-  sweepCreepTarget,
+  sweepLineTarget,
   type DesignedError,
   type ScanFlowEvent,
   type ScanFlowState,
@@ -41,7 +41,8 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
 
   const stageRef = useRef<DotStageHandle>(null)
   const stateRef = useRef(state)
-  const startAtRef = useRef(0)
+  const stageAtRef = useRef(0)
+  const lastStagesRef = useRef(0)
   const pendingScanRef = useRef<Scan | null>(null)
   const sweepModeRef = useRef<SweepModeName>('waiting')
   const navigatedRef = useRef(false)
@@ -90,7 +91,8 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   // One stream plus one timer pair per run. Retry tears it all down.
   useEffect(() => {
     navigatedRef.current = false
-    startAtRef.current = performance.now()
+    stageAtRef.current = performance.now()
+    lastStagesRef.current = 0
     const source = new EventSource(`/api/scan-progress/${encodeURIComponent(owner)}/${encodeURIComponent(repo)}`)
 
     const parse = (event: Event): unknown => {
@@ -218,14 +220,22 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
     stageRef.current?.getEngine()?.setSweepMode(mode)
   }, [state.phase, reducedMotion])
 
-  // Steady creep while the stream works; the stage caps bound every frame.
+  // Steady creep while the stream works. The wait clock restarts whenever a
+  // real stage event lands, so the line first sits on that stage's milestone
+  // and then eases toward the next boundary without reaching it. The fallback
+  // keeps creeping too; the error phase tears this ticker down.
   useEffect(() => {
-    if (state.phase !== 'streaming' || reducedMotion) return
+    if ((state.phase !== 'streaming' && state.phase !== 'fallback') || reducedMotion) return
     const tick = () => {
+      const completed = stateRef.current.stagesCompleted
+      if (completed !== lastStagesRef.current) {
+        lastStagesRef.current = completed
+        stageAtRef.current = performance.now()
+      }
       const engine = stageRef.current?.getEngine()
       if (engine) {
-        const elapsed = performance.now() - startAtRef.current
-        engine.setSweepLine(sweepCreepTarget(elapsed, stateRef.current.stagesCompleted))
+        const waited = performance.now() - stageAtRef.current
+        engine.setSweepLine(sweepLineTarget(completed, waited))
       }
       tickerRef.current = window.requestAnimationFrame(tick)
     }

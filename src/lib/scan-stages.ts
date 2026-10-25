@@ -34,13 +34,17 @@ export const SCAN_MAX_WAIT_MS = 15000
 export const SCAN_REVEAL_MS = 900
 
 /**
- * How far the sweep line may travel once a stage completes, by the number
- * of completed stages (0 = none yet). Caps always leave the last reach to
- * the color reveal after the data arrives.
+ * Where the sweep line sits when a stage completes, by the number of
+ * completed stages (0 = none yet). Index n is the floor for n completed
+ * stages; the waiting creep fills the gap toward index n + 1 but never
+ * reaches it before the event arrives. All milestones stay below 1, so
+ * the sweep can never finish before the data.
  */
-export const SCAN_LINE_CAPS = [0.06, 0.3, 0.52, 0.72, 0.85] as const
+export const SCAN_LINE_MILESTONES = [0.06, 0.3, 0.52, 0.72, 0.85] as const
 
-export function scanStageCap(stagesCompleted: number): number {
-  const index = Math.min(Math.max(stagesCompleted, 0), SCAN_LINE_CAPS.length - 1)
-  return SCAN_LINE_CAPS[index]
+export function scanLineMilestone(stagesCompleted: number): number {
+  const index = Number.isFinite(stagesCompleted)
+    ? Math.min(Math.max(Math.trunc(stagesCompleted), 0), SCAN_LINE_MILESTONES.length - 1)
+    : 0
+  return SCAN_LINE_MILESTONES[index]
 }

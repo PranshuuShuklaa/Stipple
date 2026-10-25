@@ -1,31 +1,46 @@
 'use client'
 
-import { useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
+import { createTimeline, onScroll } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
-import { DotStage, type DotStageHandle } from '@/components/ui/dot-stage'
+import { DotStage } from '@/components/ui/dot-stage'
+import type { DotEngine } from '@/engine/renderer'
+import { STORY_SEGMENT_MS } from '@/engine/motion'
 import { buildReportSteps } from './step-headlines'
 import { pickActiveStepIndex, type StepSample } from './step-activation'
 import styles from './report.module.css'
 
+function subscribeReducedMotion(onChange: () => void): () => void {
+  const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
 /**
  * The story: four scroll steps on the left, one sticky dot stage on the
- * right (REFERENCE.md "Stage and story layout"). The -45% observer band
- * is only a wake trigger; the active step is the one whose box is
- * nearest the viewport middle (pure rule in step-activation.ts), so
- * scrolling down and scrolling back decide identically and a morph is
- * always handed to the engine for the step actually on screen. The
- * dispatch also self-heals: if the engine reports a different layout
- * than the one that was last requested for this step (a missed event, a
- * tier rebuild, a fast-refresh remount), the morph is re-sent instead of
- * being swallowed forever.
+ * right (REFERENCE.md "Stage and story layout"). The step nearest the
+ * viewport middle drives the text. The dots are one anime.js v4 timeline
+ * scrubbed by onScroll: the first step centre maps to Files, the last one
+ * to Folders, and every frame is rebuilt from the engine's own per-dot
+ * progress, so scrolling back reaches the same frame and stopping holds it.
  */
 export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
   const steps = useMemo(() => buildReportSteps(scan), [scan])
   const stepsRef = useRef<HTMLDivElement | null>(null)
-  const stageRef = useRef<DotStageHandle | null>(null)
-  const lastRequestedRef = useRef<string>('')
+  const [engine, setEngine] = useState<DotEngine | null>(null)
   const [activeIndex, setActiveIndex] = useState(0)
 
+  const reducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    () => false,
+  )
+
+  const handleEngineReady = useCallback((next: DotEngine | null) => {
+    setEngine(next)
+  }, [])
+
+  // Active step for the text copy: the box nearest the viewport middle
   useEffect(() => {
     const root = stepsRef.current
     if (!root) return
@@ -56,21 +71,87 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
     return () => observer.disconnect()
   }, [])
 
+  // One scrubbed timeline for the dot stage: a 1200 ms morph plus the
+  // 200 ms stagger budget per segment, linked 1:1 with the scroll.
   useEffect(() => {
-    const step = steps[activeIndex]
-    if (!step) return
-    const desired = step.layout
-    const reported = stageRef.current?.getCurrentLayout() ?? null
-    if (reported === desired) {
-      // The engine already targets this step's layout (its initial Files
-      // morph covers the first activation), just remember it.
-      lastRequestedRef.current = desired
-      return
+    if (!engine || reducedMotion) return
+    const root = stepsRef.current
+    if (!root || steps.length < 2) return
+    const stepElements = Array.from(root.querySelectorAll<HTMLElement>('[data-step-index]'))
+    const first = stepElements[0]
+    const last = stepElements[stepElements.length - 1]
+    if (!first || !last) return
+
+    engine.prepareStory(steps.map((step) => step.layout))
+
+    const proxies = steps.slice(1).map(() => ({ p: 0 }))
+    const applyFrame = () => {
+      engine.setStoryFrame(proxies.map((proxy) => proxy.p))
     }
-    if (lastRequestedRef.current === desired) return
-    lastRequestedRef.current = desired
-    stageRef.current?.morphTo(desired)
-  }, [activeIndex, steps])
+
+    const timeline = createTimeline({ autoplay: false })
+    for (const proxy of proxies) {
+      timeline.add(proxy, {
+        p: 1,
+        duration: STORY_SEGMENT_MS,
+        ease: 'linear',
+      })
+    }
+
+    // Endpoints measured from the real steps: the first step's centre sits
+    // at the viewport middle at progress 0, the last one at progress 1.
+    const thresholds = () => {
+      const rootRect = root.getBoundingClientRect()
+      const firstRect = first.getBoundingClientRect()
+      const lastRect = last.getBoundingClientRect()
+      const middle = window.innerHeight / 2
+      return {
+        enter: rootRect.top - (firstRect.top + firstRect.bottom) / 2 + middle,
+        leave: rootRect.bottom - (lastRect.top + lastRect.bottom) / 2 + middle,
+      }
+    }
+
+    const observer = onScroll({
+      target: root,
+      sync: true,
+      enter: () => ({ target: 'start', container: thresholds().enter }),
+      leave: () => ({ target: 'end', container: thresholds().leave }),
+      onUpdate: applyFrame,
+    })
+    observer.link(timeline)
+    // onScroll measures its explicit target on the next anime tick and
+    // applies the current frame; the resize listener re-measures later.
+
+    // A reload can restore the scroll exactly on the last step centre, where
+    // the observer sits on the edge and does not emit an update. Once it has
+    // measured, place the timeline at the real scroll and apply that frame
+    // so the stage never sits on the intro layout past the end of the story.
+    const settle = window.setTimeout(() => {
+      if (!observer.ready || observer.progress <= 0) return
+      timeline.seek(timeline.duration * observer.progress)
+      applyFrame()
+    }, 60)
+
+    const handleResize = () => {
+      if (observer.target) observer.refresh()
+    }
+    window.addEventListener('resize', handleResize)
+
+    return () => {
+      window.clearTimeout(settle)
+      window.removeEventListener('resize', handleResize)
+      observer.revert()
+      timeline.revert()
+      engine.endStory()
+    }
+  }, [engine, reducedMotion, steps])
+
+  // Reduced motion: no scrub, the active step cross-fades in 300 ms
+  useEffect(() => {
+    if (!engine || !reducedMotion) return
+    const step = steps[activeIndex]
+    if (step) engine.crossFadeTo(step.layout)
+  }, [activeIndex, engine, reducedMotion, steps])
 
   return (
     <div className={styles.story}>
@@ -90,10 +171,11 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
       <div className={styles.stageSlot}>
         <div className={styles.stagePin}>
           <DotStage
-            ref={stageRef}
             scan={scan}
             initialLayout="files"
             ariaLabel={ariaLabel ?? `Repository visual for ${scan.owner}/${scan.name} as a field of dots`}
+            onEngineReady={handleEngineReady}
+            labelMode={reducedMotion ? 'animate' : 'scrub'}
           />
         </div>
       </div>

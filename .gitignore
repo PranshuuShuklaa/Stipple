@@ -47,3 +47,9 @@ test-results/
 Thumbs.db
 .idea/
 .vscode/
+
+# Playwright
+/playwright-report/
+/blob-report/
+/playwright/.cache/
+/playwright/.auth/

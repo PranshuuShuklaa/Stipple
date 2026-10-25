@@ -67,7 +67,7 @@ test('a healthy stream finishes the sweep and opens the report', async ({ page }
   await page.goto(SCAN_URL)
   const field = page.getByRole('img', { name: /sweep line over gray dots/i })
   await expect(field).toBeVisible()
-  await expect(page.getByRole('status')).toContainText(/github\.com\/octo/i)
+  await expect(field).toHaveAccessibleName(/Scanning octo\/Hello-World/i)
 
   await page.waitForURL(REPORT_URL, { timeout: 30_000 })
 })

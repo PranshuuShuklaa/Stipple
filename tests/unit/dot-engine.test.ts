@@ -439,7 +439,7 @@ describe('Click Shockwave Effect (Signature Animation 2)', () => {
     expect(shockwave.getActiveCount()).toBe(1)
 
     // At start r=0, point at (400, 300) is within 70px band
-    const [offX, offY] = shockwave.getDisplacement(410, 300)
+    const [offX] = shockwave.getDisplacement(410, 300)
     expect(offX).not.toBe(0)
   })
 

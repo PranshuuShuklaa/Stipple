@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import type { Scan } from '@/lib/types/scan'
 import {
-  SCAN_LINE_CAPS,
+  SCAN_LINE_MILESTONES,
   SCAN_REVEAL_MS,
   SCAN_STAGES,
   scanStageIndexOf,
@@ -15,7 +15,7 @@ import {
   initialScanFlowState,
   processScanFlowEvent,
   scanFlowMessage,
-  sweepCreepTarget,
+  sweepLineTarget,
   sweepRevealFraction,
 } from '@/features/scan-screen/scan-flow'
 
@@ -114,29 +114,52 @@ describe('processScanFlowEvent (stream with stages)', () => {
   })
 })
 
-describe('the line never finishes before the data', () => {
-  it('every stage cap without data stays below the last cap and below 1', () => {
-    for (let completed = 0; completed <= SCAN_STAGES.length; completed++) {
-      expect(SCAN_LINE_CAPS[completed]).toBeLessThan(1)
-      expect(SCAN_LINE_CAPS[completed]).toBeGreaterThan(0)
+describe('the sweep line follows the real stages', () => {
+  it('every milestone stays inside the stage and below the finish', () => {
+    expect(SCAN_LINE_MILESTONES).toHaveLength(SCAN_STAGES.length + 1)
+    for (const milestone of SCAN_LINE_MILESTONES) {
+      expect(milestone).toBeGreaterThan(0)
+      expect(milestone).toBeLessThan(1)
     }
-    const caps = [...SCAN_LINE_CAPS]
-    for (let i = 1; i < caps.length; i++) {
-      expect(caps[i]).toBeGreaterThan(caps[i - 1]!)
+    const milestones = [...SCAN_LINE_MILESTONES]
+    for (let i = 1; i < milestones.length; i++) {
+      expect(milestones[i]).toBeGreaterThan(milestones[i - 1]!)
     }
   })
 
-  it('the creep target is bounded by the current stage cap for any elapsed time', () => {
-    for (const completed of [0, 1, 2, 3, 4]) {
-      for (const ms of [0, 500, 4000, 60_000, 1_000_000]) {
-        expect(sweepCreepTarget(ms, completed)).toBeLessThanOrEqual(SCAN_LINE_CAPS[completed]! + 1e-9)
+  it('sits exactly on the completed stage milestone the moment its event lands', () => {
+    for (let completed = 0; completed <= SCAN_STAGES.length; completed++) {
+      expect(sweepLineTarget(completed, 0)).toBeCloseTo(SCAN_LINE_MILESTONES[completed]!, 10)
+    }
+  })
+
+  it('creeps toward the next boundary but never crosses it before the event arrives', () => {
+    for (let completed = 0; completed < SCAN_STAGES.length; completed++) {
+      const floor = SCAN_LINE_MILESTONES[completed]!
+      const boundary = SCAN_LINE_MILESTONES[completed + 1]!
+      let previous: number = floor
+      for (const waited of [0, 1, 500, 4000, 60_000, 1_000_000, Number.POSITIVE_INFINITY]) {
+        const target = sweepLineTarget(completed, waited)
+        expect(target).toBeGreaterThanOrEqual(previous - 1e-12)
+        expect(target).toBeGreaterThanOrEqual(floor - 1e-12)
+        expect(target).toBeLessThan(boundary)
+        previous = target
       }
     }
   })
 
-  it('the creep starts gently and grows with time', () => {
-    expect(sweepCreepTarget(0, 0)).toBeCloseTo(0.02, 5)
-    expect(sweepCreepTarget(1000, 0)).toBeGreaterThan(sweepCreepTarget(0, 0))
+  it('holds the last milestone once all four stages are in, leaving the finish to the reveal', () => {
+    const last = SCAN_LINE_MILESTONES[SCAN_STAGES.length]!
+    expect(last).toBeLessThan(1)
+    expect(sweepLineTarget(SCAN_STAGES.length, 0)).toBeCloseTo(last, 10)
+    expect(sweepLineTarget(SCAN_STAGES.length, 1_000_000)).toBeCloseTo(last, 10)
+  })
+
+  it('clamps impossible stage counts and wait times', () => {
+    expect(sweepLineTarget(-3, 500)).toBeCloseTo(sweepLineTarget(0, 0), 10)
+    expect(sweepLineTarget(99, 0)).toBeCloseTo(SCAN_LINE_MILESTONES[SCAN_STAGES.length]!, 10)
+    expect(sweepLineTarget(2, -100)).toBeCloseTo(SCAN_LINE_MILESTONES[2]!, 10)
+    expect(sweepLineTarget(2, Number.NaN)).toBeCloseTo(SCAN_LINE_MILESTONES[2]!, 10)
   })
 
   it('the reveal runs the line out to the full width inside SCAN_REVEAL_MS', () => {
@@ -151,12 +174,9 @@ describe('the line never finishes before the data', () => {
     }
   })
 
-  it('a cached scan (all events at once) finishes the sweep in about SCAN_REVEAL_MS', () => {
-    // Stage events all land inside the probe window; the line has only crept a bit.
-    const crept = sweepCreepTarget(200, 4)
-    expect(crept).toBeLessThanOrEqual(SCAN_LINE_CAPS[4]!)
-    const fraction = sweepRevealFraction(SCAN_REVEAL_MS, crept)
-    expect(fraction).toBeCloseTo(1, 5)
+  it('a cached scan (all events at once) finishes in SCAN_REVEAL_MS from wherever the line is', () => {
+    expect(sweepRevealFraction(SCAN_REVEAL_MS, 0)).toBeCloseTo(1, 5)
+    expect(sweepRevealFraction(SCAN_REVEAL_MS, SCAN_LINE_MILESTONES[0]!)).toBeCloseTo(1, 5)
   })
 })
 

@@ -24,7 +24,16 @@ const fontSans = Familjen_Grotesk({
 const themeBeforePaint =
   "(function(){try{var t=localStorage.getItem('stipple-theme');if(t==='dark'||t==='light'){document.documentElement.dataset.theme=t}}catch(e){}})()"
 
+function siteBaseUrl(): URL {
+  try {
+    return new URL(process.env.NEXT_PUBLIC_SITE_URL ?? 'https://stipple.dev')
+  } catch {
+    return new URL('https://stipple.dev')
+  }
+}
+
 export const metadata: Metadata = {
+  metadataBase: siteBaseUrl(),
   title: 'Stipple — your repo, one dot per file',
   description:
     'Paste a public GitHub repo and see it as a field of dots. One dot is one file.',

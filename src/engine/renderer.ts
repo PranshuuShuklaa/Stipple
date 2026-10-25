@@ -1,6 +1,13 @@
 import { animate, stagger } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { MOTION } from './motion'
+import {
+  computeStoryDelays,
+  resolveStoryFrame,
+  storyDotProgress,
+  storyLabelOpacity,
+  type StoryFrameState,
+} from './story'
 import { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewport } from './layouts/files'
 import { calculateLanguagesLayout } from './layouts/languages'
 import { calculateActivityLayout } from './layouts/activity'
@@ -68,6 +75,7 @@ export interface DotEngineOptions {
   initialLayout?: LayoutName
   onHoverChange?: (fileIndex: number | null) => void
   onLabelsChange?: (labels: FolderLabel[] | null) => void
+  onLabelsOpacityChange?: (opacity: number) => void
   onLayoutChange?: (layout: LayoutName) => void
   onTierChange?: (tier: QualityTier) => void
 }
@@ -132,6 +140,18 @@ export class DotEngine {
   private progressTargets: DotProgressTarget[] = []
   private currentAnimation: ReturnType<typeof animate> | null = null
 
+  // Scroll-scrubbed story (every frame is a function of the segment frames)
+  private storyMode = false
+  private storyLayouts: LayoutName[] = []
+  private storyTargets: LayoutTarget[] = []
+  private storyDelays: Float32Array[] = []
+  private storyFrames: number[] = []
+  private storyLayoutIndex = -1
+
+  // Reduced-motion 300 ms cross-fade (outgoing frame snapshot + incoming dots)
+  private crossFadeSnapshot: HTMLCanvasElement | null = null
+  private crossFadeAlpha = 1
+
   // Lifecycle & loop state
   private isRunning = false
   private isIntersecting = true
@@ -169,6 +189,7 @@ export class DotEngine {
   // Callbacks
   private onHoverChange?: (fileIndex: number | null) => void
   private onLabelsChange?: (labels: FolderLabel[] | null) => void
+  private onLabelsOpacityChange?: (opacity: number) => void
   private onLayoutChange?: (layout: LayoutName) => void
   private onTierChange?: (tier: QualityTier) => void
 
@@ -188,6 +209,7 @@ export class DotEngine {
     this.theme = options.theme ?? resolveThemeColors(this.container)
     this.onHoverChange = options.onHoverChange
     this.onLabelsChange = options.onLabelsChange
+    this.onLabelsOpacityChange = options.onLabelsOpacityChange
     this.onLayoutChange = options.onLayoutChange
     this.onTierChange = options.onTierChange
 
@@ -487,6 +509,13 @@ export class DotEngine {
     this.fpsMeter.reset()
     this.evaluateNextSample = true
 
+    if (this.storyMode && this.storyTargets.length >= 2) {
+      this.rebuildStoryPlan()
+      this.storyLayoutIndex = -1
+      this.applyStoryFrame()
+      return
+    }
+
     const target = this.getLayoutTarget(this.currentLayout)
     for (let i = 0; i < this.dotCount; i++) {
       this.targetX[i] = target.x[i]
@@ -583,12 +612,7 @@ export class DotEngine {
       this.currentAnimation = null
     }
 
-    // Handle labels for folders layout
-    if (layout === 'folders' && 'labels' in target) {
-      this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
-    } else {
-      this.onLabelsChange?.(null)
-    }
+    this.setLayoutLabels(layout, target)
 
     const reducedMotion =
       typeof window !== 'undefined' &&
@@ -629,8 +653,215 @@ export class DotEngine {
     this.checkLoop()
   }
 
+  /**
+   * Hands the engine the story layouts. After this the scroll timeline is the
+   * only writer of progress; the current frame is left untouched so the
+   * intro bloom keeps running until the first scrub frame arrives.
+   */
+  public prepareStory(layouts: readonly LayoutName[]): void {
+    if (this.isDestroyed || layouts.length < 2) return
+    this.storyMode = true
+    this.storyLayouts = [...layouts]
+    this.storyLayoutIndex = -1
+    this.rebuildStoryPlan()
+    const segmentCount = this.storyLayouts.length - 1
+    if (this.storyFrames.length !== segmentCount) {
+      this.storyFrames = new Array<number>(segmentCount).fill(0)
+    }
+  }
+
+  /**
+   * Draws one story frame from scratch. Every dot is placed from its own
+   * eased, staggered progress, so the same frame appears whether the page is
+   * scrolling down, scrolling up, or stopped.
+   */
+  public setStoryFrame(frames: readonly number[]): void {
+    if (this.isDestroyed || !this.storyMode || this.storyTargets.length < 2) return
+    const segmentCount = this.storyTargets.length - 1
+    const next = new Array<number>(segmentCount)
+    for (let i = 0; i < segmentCount; i++) next[i] = clamp01(frames[i] ?? 0)
+    this.storyFrames = next
+
+    if (this.currentAnimation) {
+      this.currentAnimation.pause()
+      this.currentAnimation = null
+    }
+    // A late reduced-motion cross-fade must not stay layered over the story.
+    this.clearCrossFade()
+
+    this.applyStoryFrame()
+  }
+
+  /**
+   * Reduced-motion fallback (DESIGN.md): no dots travel. The outgoing frame
+   * is frozen to an offscreen canvas and faded out in 300 ms while the new
+   * layout fades in underneath it.
+   */
+  public crossFadeTo(layout: LayoutName): void {
+    if (this.isDestroyed) return
+
+    if (this.currentAnimation) {
+      this.currentAnimation.pause()
+      this.currentAnimation = null
+    }
+
+    this.storyMode = false
+    this.storyLayouts = []
+    this.storyTargets = []
+    this.storyDelays = []
+    this.storyFrames = []
+    this.storyLayoutIndex = -1
+
+    const snapshot = this.captureSnapshot()
+    this.clearCrossFade()
+    const target = this.getLayoutTarget(layout)
+
+    for (let i = 0; i < this.dotCount; i++) {
+      this.x[i] = this.targetX[i] = target.x[i]
+      this.y[i] = this.targetY[i] = target.y[i]
+      this.size[i] = this.targetSize[i] = target.size[i]
+      this.alpha[i] = this.targetAlpha[i] = target.alpha[i]
+      this.r[i] = this.targetR[i] = target.r[i]
+      this.g[i] = this.targetG[i] = target.g[i]
+      this.b[i] = this.targetB[i] = target.b[i]
+      this.progressTargets[i].p = 1
+    }
+
+    this.currentLayout = layout
+    this.onLayoutChange?.(layout)
+    this.setLayoutLabels(layout, target)
+    this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
+
+    if (!snapshot) {
+      this.render()
+      return
+    }
+
+    this.crossFadeSnapshot = snapshot
+    this.crossFadeAlpha = 0
+    const proxy = { a: 0 }
+    this.currentAnimation = animate(proxy, {
+      a: 1,
+      duration: MOTION.duration.crossFade,
+      ease: 'linear',
+      onUpdate: () => {
+        this.crossFadeAlpha = proxy.a
+        this.render()
+      },
+      onComplete: () => {
+        this.crossFadeAlpha = 1
+        this.crossFadeSnapshot = null
+        this.currentAnimation = null
+        this.render()
+      },
+    })
+    this.checkLoop()
+  }
+
+  public endStory(): void {
+    if (this.isDestroyed) return
+    this.storyMode = false
+    this.storyLayouts = []
+    this.storyTargets = []
+    this.storyDelays = []
+    this.storyFrames = []
+    this.storyLayoutIndex = -1
+    this.clearCrossFade()
+    this.onLabelsOpacityChange?.(1)
+  }
+
+  private rebuildStoryPlan(): void {
+    this.storyTargets = this.storyLayouts.map((layout) => this.getLayoutTarget(layout))
+    this.storyDelays = this.storyTargets.slice(1).map((target) =>
+      computeStoryDelays(this.dotCount, target.cols, target.rows)
+    )
+  }
+
+  private applyStoryFrame(): void {
+    if (!this.storyMode || this.storyTargets.length < 2 || this.storyFrames.length === 0) return
+    const state = resolveStoryFrame(this.storyFrames)
+    const from = this.storyTargets[state.segment]
+    const to = this.storyTargets[state.segment + 1]
+    if (!from || !to) return
+    const delays = this.storyDelays[state.segment]
+
+    for (let i = 0; i < this.dotCount; i++) {
+      const q = storyDotProgress(state.progress, delays?.[i] ?? 0)
+      this.x[i] = this.targetX[i] = from.x[i] + (to.x[i] - from.x[i]) * q
+      this.y[i] = this.targetY[i] = from.y[i] + (to.y[i] - from.y[i]) * q
+      this.size[i] = this.targetSize[i] = from.size[i] + (to.size[i] - from.size[i]) * q
+      this.alpha[i] = this.targetAlpha[i] = from.alpha[i] + (to.alpha[i] - from.alpha[i]) * q
+      this.r[i] = this.targetR[i] = Math.round(from.r[i] + (to.r[i] - from.r[i]) * q)
+      this.g[i] = this.targetG[i] = Math.round(from.g[i] + (to.g[i] - from.g[i]) * q)
+      this.b[i] = this.targetB[i] = Math.round(from.b[i] + (to.b[i] - from.b[i]) * q)
+      this.progressTargets[i].p = 1
+    }
+
+    this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
+    this.syncStoryLayout(state)
+    this.render()
+  }
+
+  private syncStoryLayout(state: StoryFrameState): void {
+    const indexChanged = state.layoutIndex !== this.storyLayoutIndex
+    this.storyLayoutIndex = state.layoutIndex
+    const layout = this.storyLayouts[state.layoutIndex]
+    const target = this.storyTargets[state.layoutIndex]
+
+    if (layout && layout !== this.currentLayout) {
+      this.currentLayout = layout
+      this.onLayoutChange?.(layout)
+    }
+
+    const hasLabels = layout === 'folders' && target !== undefined && 'labels' in target
+    if (indexChanged) {
+      if (hasLabels) {
+        this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
+      } else {
+        this.onLabelsChange?.(null)
+      }
+    }
+
+    this.onLabelsOpacityChange?.(
+      hasLabels ? storyLabelOpacity(this.storyFrames[state.layoutIndex - 1] ?? 0) : 0
+    )
+  }
+
+  private setLayoutLabels(layout: LayoutName, target: LayoutTarget): void {
+    if (layout === 'folders' && 'labels' in target) {
+      this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
+    } else {
+      this.onLabelsChange?.(null)
+    }
+    this.onLabelsOpacityChange?.(1)
+  }
+
+  private captureSnapshot(): HTMLCanvasElement | null {
+    if (typeof document === 'undefined' || this.width <= 0 || this.height <= 0) return null
+    const snapshot = document.createElement('canvas')
+    snapshot.width = this.canvas.width
+    snapshot.height = this.canvas.height
+    const snapshotCtx = snapshot.getContext('2d')
+    if (!snapshotCtx) return null
+    snapshotCtx.drawImage(this.canvas, 0, 0)
+    return snapshot
+  }
+
+  private clearCrossFade(): void {
+    this.crossFadeSnapshot = null
+    this.crossFadeAlpha = 1
+  }
+
   public updateTheme(theme?: ThemeColors): void {
     this.theme = theme ?? resolveThemeColors(this.container)
+
+    if (this.storyMode && this.storyTargets.length >= 2) {
+      this.rebuildStoryPlan()
+      this.storyLayoutIndex = -1
+      this.applyStoryFrame()
+      return
+    }
+
     const target = this.getLayoutTarget(this.currentLayout)
     for (let i = 0; i < this.dotCount; i++) {
       this.targetR[i] = target.r[i]
@@ -654,14 +885,21 @@ export class DotEngine {
   public setScan(scan: Scan): void {
     if (this.isDestroyed) return
     this.rawScan = scan
+    const story = this.storyMode
     const desired = Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP)
     if (desired === this.dotCount) {
       this.dotField = buildDotField(scan, this.dotCount)
       this.scan = this.dotField.scan
-      this.morphTo(this.currentLayout)
+    } else {
+      this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
+    }
+
+    if (story) {
+      this.rebuildStoryPlan()
+      this.storyLayoutIndex = -1
+      this.applyStoryFrame()
       return
     }
-    this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
     this.morphTo(this.currentLayout)
   }
 
@@ -725,7 +963,13 @@ export class DotEngine {
     }
     this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
     this.onTierChange?.(this.qualityTier)
-    this.morphTo(this.currentLayout)
+    if (this.storyMode) {
+      this.rebuildStoryPlan()
+      this.storyLayoutIndex = -1
+      this.applyStoryFrame()
+    } else {
+      this.morphTo(this.currentLayout)
+    }
     // Re-measure after the rebuild so the tier decision is based on the new load
     this.fpsMeter.reset()
     this.evaluateNextSample = true
@@ -737,13 +981,22 @@ export class DotEngine {
 
     ctx.clearRect(0, 0, this.width, this.height)
 
+    if (this.crossFadeSnapshot) {
+      ctx.save()
+      ctx.setTransform(1, 0, 0, 1, 0, 0)
+      ctx.globalAlpha = clamp01(1 - this.crossFadeAlpha)
+      ctx.drawImage(this.crossFadeSnapshot, 0, 0)
+      ctx.restore()
+    }
+
+    const fade = this.crossFadeSnapshot ? this.crossFadeAlpha : 1
     const hovered = this.hoveredIndex
     const hx = hovered !== -1 ? this.x[hovered] + this.size[hovered] / 2 : -9999
     const hy = hovered !== -1 ? this.y[hovered] + this.size[hovered] / 2 : -9999
     const hasWake = this.qualityTier.effects.pointerField
     const hasShockwave = this.qualityTier.name !== 'low' && this.shockwave.getActiveCount() > 0
     const sweepHolds = this.sweep.holdsColors()
-    const sweepShimmer = sweepHolds && this.sweep.getMode() === 'shimmer'
+    const sweepShimmer = sweepHolds && this.sweep.isShimmering()
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -768,7 +1021,7 @@ export class DotEngine {
       }
 
       let radius = this.size[i] / 2
-      let a = this.alpha[i]
+      let a = this.alpha[i] * fade
       const isHoveredDot = i === hovered
 
       // Base canvas-space center of this dot
@@ -798,7 +1051,7 @@ export class DotEngine {
           const dist = Math.sqrt(distSq)
           const lift = (1 - dist / 80) * 1.8
           radius += lift / 2
-          a = Math.min(1.0, a + 0.15)
+          a = Math.min(1.0, a + 0.15 * fade)
         }
       }
 
@@ -850,6 +1103,12 @@ export class DotEngine {
       this.currentAnimation.pause()
       this.currentAnimation = null
     }
+    this.crossFadeSnapshot = null
+    this.storyMode = false
+    this.storyLayouts = []
+    this.storyTargets = []
+    this.storyDelays = []
+    this.storyFrames = []
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect()

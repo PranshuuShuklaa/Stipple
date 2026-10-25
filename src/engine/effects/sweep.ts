@@ -3,8 +3,10 @@
  * The screen drives the line fraction; the mode drives what the canvas
  * shows: gray dots ahead of the line with real colors behind it, a thin
  * vertical line while the scan runs, and an indeterminate alpha shimmer
- * when nothing can progress (fallback or no events yet). Reduced motion
- * draws neither line nor shimmer — colors simply arrive with the scan.
+ * over the waiting gray dots (both while stages stream and while the
+ * direct-request fallback runs). Error and done set the mode to off, so
+ * the line, shimmer and color reveal all stop. Reduced motion draws
+ * neither line nor shimmer — colors simply arrive with the scan.
  */
 
 export type SweepMode = 'off' | 'waiting' | 'shimmer' | 'reveal'
@@ -59,12 +61,21 @@ export class SweepEffect {
   }
 
   public isLineVisible(): boolean {
-    return (this.mode === 'waiting' || this.mode === 'reveal') && this.lineFrac > 0
+    if (this.reducedMotion) return false
+    return (
+      (this.mode === 'waiting' || this.mode === 'shimmer' || this.mode === 'reveal') &&
+      this.lineFrac > 0
+    )
+  }
+
+  /** True while the unrevealed gray dots carry the waiting shimmer. */
+  public isShimmering(): boolean {
+    return !this.reducedMotion && (this.mode === 'waiting' || this.mode === 'shimmer')
   }
 
   /** Indeterminate alpha modulation for the waiting shimmer run. */
   public shimmerFactor(xFrac: number, nowMs: number): number {
-    if (this.reducedMotion || this.mode !== 'shimmer') return 1
+    if (!this.isShimmering()) return 1
     const phase = ((xFrac - (nowMs % SWEEP_SHIMMER_PERIOD_MS) / SWEEP_SHIMMER_PERIOD_MS) % 1 + 1) % 1
     const wave = 0.5 + 0.5 * Math.sin(phase * Math.PI * 2)
     return 1 - SHIMMER_AMPLITUDE + SHIMMER_AMPLITUDE * wave
