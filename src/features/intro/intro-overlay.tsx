@@ -335,6 +335,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     if (reducedMotion) {
       const wm = document.createElement('div')
       wm.className = styles.wordmarkFade
+      wm.setAttribute('aria-hidden', 'true')
       const txt = document.createElement('p')
       txt.className = styles.wordmark
       txt.textContent = 'stipple'

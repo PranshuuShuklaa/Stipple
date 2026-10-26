@@ -49,9 +49,8 @@ test('the files legend shows the real file count on the report stage', async ({ 
 })
 
 test('the shared dot stage legend lists language swatches for the demo fixture', async ({ page }) => {
-  // The report repo (Hello-World) counts a single language, so its Files
-  // legend correctly has no swatches (DESIGN.md: swatches only with data).
-  // /dev/engine runs the real DotStage on the 5-language fixture.
+  // /dev/engine runs the real DotStage on the 5-language fixture, so every
+  // language color in the field has a text label in the legend.
   await page.goto('/dev/engine')
   const swatches = page.locator('[class*="swatch"]')
   await expect(swatches.first()).toBeVisible()

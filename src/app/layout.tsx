@@ -49,6 +49,9 @@ export default function RootLayout({
       </head>
       <body>
         <header className="site-header">
+          <a className="skip-link" href="#main-content">
+            Skip to content
+          </a>
           <div className="shell">
             <Link className="wordmark" href="/">
               stipple
@@ -56,7 +59,9 @@ export default function RootLayout({
             <ThemeToggle />
           </div>
         </header>
-        <main>{children}</main>
+        <main id="main-content" tabIndex={-1}>
+          {children}
+        </main>
       </body>
     </html>
   )

@@ -154,7 +154,7 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
   }, [activeIndex, engine, reducedMotion, steps])
 
   return (
-    <div className={styles.story}>
+    <section className={styles.story} aria-label="The repository story">
       <div className={styles.steps} ref={stepsRef}>
         {steps.map((step, index) => (
           <section
@@ -179,6 +179,6 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
           />
         </div>
       </div>
-    </div>
+    </section>
   )
 }

@@ -4,6 +4,7 @@ import type { Metadata } from 'next'
 import { getScanCached } from '@/server/cache'
 import { formatCount } from '@/features/report/step-headlines'
 import { Story } from '@/features/report/story'
+import { StageDataTable } from '@/features/report/stage-data-table'
 import { HealthSection } from '@/features/report/health-section'
 import { NumbersSection } from '@/features/report/numbers-section'
 import { DependenciesSection } from '@/features/report/dependencies-section'
@@ -88,6 +89,7 @@ async function ReportContent({ params }: ReportParams) {
       </header>
 
       <Story scan={scan} />
+      <StageDataTable scan={scan} />
 
       <div className={reportStyles.sections}>
         <HealthSection scan={scan} />

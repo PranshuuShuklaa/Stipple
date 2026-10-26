@@ -392,14 +392,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
 
       {/* Legend bottom left */}
       {variant === 'full' && (
-        <div className={styles.legend} aria-hidden="true">
+        <div className={styles.legend}>
           {currentLayout === 'files' && (
             <>
               <span>
                 {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length} files
                 {stats && stats.filesPerDot > 1 ? ` · one dot = ${stats.filesPerDot} files` : ''}
               </span>
-              {languageStats.length > 1 &&
+              {languageStats.length > 0 &&
                 languageStats.map((item) => (
                   <span key={item.name} className={styles.legendItem}>
                     <i className={styles.swatch} style={{ background: item.colorVar }} />

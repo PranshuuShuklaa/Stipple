@@ -36,8 +36,8 @@ export function NumbersSection({ scan }: { scan: Scan }) {
   const stats = statsOf(scan)
 
   return (
-    <section id="numbers" ref={sectionRef}>
-      <RiseText text="Numbers." className={`type-section ${styles.sectionHeadline}`} />
+    <section id="numbers" ref={sectionRef} aria-labelledby="numbers-heading">
+      <RiseText id="numbers-heading" text="Numbers." className={`type-section ${styles.sectionHeadline}`} />
       <ul className={styles.statsRow}>
         {stats.map((stat) => (
           <li key={stat.label}>

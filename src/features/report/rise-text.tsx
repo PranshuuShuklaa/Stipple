@@ -10,6 +10,7 @@ interface RiseTextProps {
   text: string
   className?: string
   as?: 'h2' | 'h3'
+  id?: string
 }
 
 /**
@@ -17,7 +18,7 @@ interface RiseTextProps {
  * clipped mask and slides up from below once, on scroll entry. 700 ms
  * outExpo, 80 ms between lines. Reduced motion leaves plain text alone.
  */
-export function RiseText({ text, className, as: Tag = 'h2' }: RiseTextProps) {
+export function RiseText({ text, className, as: Tag = 'h2', id }: RiseTextProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const contentRef = useRef<HTMLSpanElement | null>(null)
   const visibleRef = useRef(false)
@@ -74,7 +75,7 @@ export function RiseText({ text, className, as: Tag = 'h2' }: RiseTextProps) {
   }, [visible])
 
   return (
-    <Tag ref={headingRef} className={className}>
+    <Tag ref={headingRef} className={className} id={id}>
       <span ref={contentRef} className={styles.riseContent}>
         {text}
       </span>
@@ -86,6 +87,7 @@ interface RiseMaskProps {
   children: ReactNode
   className?: string
   as?: 'h2' | 'h3'
+  id?: string
 }
 
 /**
@@ -93,7 +95,7 @@ interface RiseMaskProps {
  * No splitting: the whole line block slides up behind a clip, so the live
  * score node stays the same node and its count-up keeps working.
  */
-export function RiseMask({ children, className, as: Tag = 'h2' }: RiseMaskProps) {
+export function RiseMask({ children, className, as: Tag = 'h2', id }: RiseMaskProps) {
   const headingRef = useRef<HTMLHeadingElement | null>(null)
   const innerRef = useRef<HTMLSpanElement | null>(null)
   const playedRef = useRef(false)
@@ -128,7 +130,7 @@ export function RiseMask({ children, className, as: Tag = 'h2' }: RiseMaskProps)
   }, [visible, reducedMotion])
 
   return (
-    <Tag ref={headingRef} className={className}>
+    <Tag ref={headingRef} className={className} id={id}>
       <span className={styles.riseMask}>
         <span ref={innerRef} className={styles.riseInner}>
           {children}

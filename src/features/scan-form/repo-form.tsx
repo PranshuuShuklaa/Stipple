@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, type FormEvent } from 'react'
+import { useId, useRef, useState, type FormEvent } from 'react'
 import { useRouter } from 'next/navigation'
 import { parseRepoInput } from '@/lib/repo-input'
 import styles from './scan-form.module.css'
@@ -11,6 +11,7 @@ const INVALID_MESSAGE = "That doesn't look like a GitHub repo. Use owner/repo, o
 export function RepoForm() {
   const router = useRouter()
   const inputRef = useRef<HTMLInputElement>(null)
+  const messageId = useId()
   const [message, setMessage] = useState('')
   const [invalid, setInvalid] = useState(false)
 
@@ -36,6 +37,7 @@ export function RepoForm() {
     <form className={styles.form} onSubmit={handleSubmit} noValidate>
       <div className={styles.fieldRow}>
         <label htmlFor="repo-input" className={styles.prefix}>
+          <span className="visually-hidden">GitHub repository, </span>
           github.com/
         </label>
         <input
@@ -46,6 +48,8 @@ export function RepoForm() {
           className={styles.input}
           placeholder="owner/repo"
           aria-invalid={invalid}
+          aria-describedby={messageId}
+          aria-errormessage={invalid ? messageId : undefined}
           autoComplete="off"
           autoCapitalize="none"
           spellCheck={false}
@@ -54,7 +58,7 @@ export function RepoForm() {
           Scan repo
         </button>
       </div>
-      <p className={styles.message} role="status" aria-live="polite">
+      <p id={messageId} className={styles.message} role="status" aria-live="polite">
         {message}
       </p>
     </form>

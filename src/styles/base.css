@@ -114,6 +114,30 @@ h3 {
   outline-offset: var(--focus-offset);
 }
 
+/* Keyboard skip link: off screen until focused, then the first stop */
+
+.skip-link {
+  position: fixed;
+  top: 12px;
+  left: 12px;
+  z-index: 2000;
+  padding: 10px 16px;
+  border-radius: 999px;
+  background: var(--fg);
+  color: var(--bg);
+  font-size: 15px;
+  font-weight: 600;
+  transform: translateY(calc(-100% - 24px));
+}
+
+.skip-link:focus {
+  transform: translateY(0);
+}
+
+main:focus {
+  outline: none;
+}
+
 /* Accessibility helpers */
 
 .visually-hidden,

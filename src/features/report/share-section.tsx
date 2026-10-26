@@ -37,6 +37,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
   const quality = useQualityTier()
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copyMessage, setCopyMessage] = useState('')
   const [copyPulse, setCopyPulse] = useState(0)
   const [siteUrl] = useState(() => getSiteUrl())
 
@@ -105,10 +106,15 @@ export function ShareSection({ scan }: { scan: Scan }) {
     key: string,
     text: string,
     button: HTMLButtonElement,
+    label: string,
   ) => {
     const success = await copyToClipboard(text)
-    if (!success) return
+    if (!success) {
+      setCopyMessage('Copy failed. Select the text and copy it manually.')
+      return
+    }
 
+    setCopyMessage(`${label} copied.`)
     copiedButtonRef.current = button
     setCopiedKey(key)
     if (copyTimerRef.current !== null) {
@@ -125,14 +131,19 @@ export function ShareSection({ scan }: { scan: Scan }) {
   }
 
   return (
-    <section id="share" ref={sectionRef} className={styles.shareSection}>
+    <section
+      id="share"
+      ref={sectionRef}
+      className={styles.shareSection}
+      aria-labelledby="share-heading"
+    >
       <LinkForge
         ref={forgeRef}
         badgeRef={badgeImageRef}
         active={visible && motionEnabled}
         band={band}
       />
-      <RiseText text="Share." className={`type-section ${styles.sectionHeadline}`} />
+      <RiseText id="share-heading" text="Share." className={`type-section ${styles.sectionHeadline}`} />
       <p className={styles.sectionBody}>
         Embed this repo&apos;s live health badge and animated card in your README, or share the story link.
       </p>
@@ -148,6 +159,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               src={badgeApiUrl}
               alt={`${scan.owner}/${scan.name} Stipple health badge`}
             />
+            <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
         <div className={styles.previewCard}>
@@ -155,6 +167,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <a href={reportUrl} target="_blank" rel="noopener noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img src={cardApiUrl} alt={`${scan.owner}/${scan.name} Stipple animated card`} width="300" height="120" style={{ maxWidth: '100%', height: 'auto' }} />
+            <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
       </div>
@@ -166,7 +179,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={(event) => handleCopy('link', reportUrl, event.currentTarget)}
+              onClick={(event) => handleCopy('link', reportUrl, event.currentTarget, 'Report link')}
             >
               {copiedKey === 'link' ? 'Copied' : 'Copy link'}
             </button>
@@ -181,7 +194,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('badge', badgeMarkdown, event.currentTarget)
+                handleCopy('badge', badgeMarkdown, event.currentTarget, 'Badge Markdown')
               }
             >
               {copiedKey === 'badge' ? 'Copied' : 'Copy badge'}
@@ -197,7 +210,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('card', cardMarkdown, event.currentTarget)
+                handleCopy('card', cardMarkdown, event.currentTarget, 'Card Markdown')
               }
             >
               {copiedKey === 'card' ? 'Copied' : 'Copy card'}
@@ -213,7 +226,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('summary', summaryBlock, event.currentTarget)
+                handleCopy('summary', summaryBlock, event.currentTarget, 'Summary block')
               }
             >
               {copiedKey === 'summary' ? 'Copied' : 'Copy summary'}
@@ -222,6 +235,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <pre className={styles.copyPre}><code>{summaryBlock}</code></pre>
         </div>
       </div>
+      <p className={styles.copyStatus} role="status" aria-live="polite">
+        {copyMessage}
+      </p>
     </section>
   )
 }
