@@ -75,7 +75,7 @@ export function RiseText({ text, className, as: Tag = 'h2', id }: RiseTextProps)
   }, [visible])
 
   return (
-    <Tag ref={headingRef} className={className} id={id}>
+    <Tag ref={headingRef} id={id} className={className}>
       <span ref={contentRef} className={styles.riseContent}>
         {text}
       </span>
@@ -130,7 +130,7 @@ export function RiseMask({ children, className, as: Tag = 'h2', id }: RiseMaskPr
   }, [visible, reducedMotion])
 
   return (
-    <Tag ref={headingRef} className={className} id={id}>
+    <Tag ref={headingRef} id={id} className={className}>
       <span className={styles.riseMask}>
         <span ref={innerRef} className={styles.riseInner}>
           {children}

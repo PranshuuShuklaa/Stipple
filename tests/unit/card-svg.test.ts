@@ -63,4 +63,15 @@ describe('card-svg generator', () => {
     expect(result.svg).toContain('missing')
     expect(result.svg).toContain('n/a')
   })
+
+  it('escapes owner, repo, and language text exactly once', () => {
+    const spec = fallbackCardSpec('a&b', 'c<d')
+    spec.languages = [{ name: 'C&C++', percent: 100, colorKey: 'c1' }]
+    const { svg } = buildCardSvg(spec)
+
+    expect(svg).toContain('a&amp;b / c&lt;d')
+    expect(svg).toContain('C&amp;C++')
+    expect(svg).not.toContain('a&amp;amp;b')
+    expect(svg).not.toContain('C&amp;amp;C++')
+  })
 })

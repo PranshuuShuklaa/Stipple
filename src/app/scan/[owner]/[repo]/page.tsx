@@ -23,7 +23,13 @@ interface ScanParams {
 export default function ScanPage({ params }: ScanParams) {
   return (
     <div className={styles.wrap}>
-      <Suspense fallback={<p className={`type-section ${styles.pending}`}>Opening the scan…</p>}>
+      <Suspense
+        fallback={
+          <p className={`type-section ${styles.pending}`} role="status">
+            Opening the scan…
+          </p>
+        }
+      >
         <ScanContent params={params} />
       </Suspense>
     </div>

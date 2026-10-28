@@ -37,8 +37,8 @@ export function RepoForm() {
     <form className={styles.form} onSubmit={handleSubmit} noValidate>
       <div className={styles.fieldRow}>
         <label htmlFor="repo-input" className={styles.prefix}>
-          <span className="visually-hidden">GitHub repository, </span>
-          github.com/
+          <span aria-hidden="true">github.com/</span>
+          <span className="visually-hidden">GitHub repository, owner and repo</span>
         </label>
         <input
           id="repo-input"
@@ -48,6 +48,7 @@ export function RepoForm() {
           className={styles.input}
           placeholder="owner/repo"
           aria-invalid={invalid}
+          aria-required="true"
           aria-describedby={messageId}
           aria-errormessage={invalid ? messageId : undefined}
           autoComplete="off"

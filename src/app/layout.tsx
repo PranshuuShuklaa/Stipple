@@ -65,10 +65,10 @@ export default function RootLayout({
         <Suspense fallback={null}>
           <RouteFocus />
         </Suspense>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <header className="site-header">
-          <a className="skip-link" href="#main-content">
-            Skip to content
-          </a>
           <div className="shell">
             <Link className="wordmark" href="/">
               stipple

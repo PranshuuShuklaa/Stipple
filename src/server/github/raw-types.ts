@@ -15,6 +15,7 @@ export interface RawRepo {
   default_branch: string
   stargazers_count: number
   html_url: string
+  archived: boolean
   pushed_at: string | null
   owner: RawRepoOwner
   license: {

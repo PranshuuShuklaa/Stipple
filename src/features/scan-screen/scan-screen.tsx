@@ -123,10 +123,24 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
       })
     }
 
+    let fallbackTimer: number | null = null
+    let maxWaitTimer: number | null = null
+    const clearTimers = () => {
+      if (fallbackTimer !== null) {
+        window.clearTimeout(fallbackTimer)
+        fallbackTimer = null
+      }
+      if (maxWaitTimer !== null) {
+        window.clearTimeout(maxWaitTimer)
+        maxWaitTimer = null
+      }
+    }
+
     const onDone = (event: Event) => {
       const data = parse(event) as { scan?: Scan } | null
       if (!data?.scan) return
       source.close()
+      clearTimers()
       process({ type: 'scan-ready', scan: data.scan, source: 'stream' })
     }
 
@@ -134,11 +148,13 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
       if (event instanceof MessageEvent && typeof event.data === 'string' && event.data !== '') {
         const data = parse(event) as { error?: DesignedError } | null
         source.close()
+        clearTimers()
         process({ type: 'designed-error', error: data?.error ?? FALLBACK_FETCH_ERROR })
         return
       }
       // The connection broke (blocked URL, network drop, server restart).
       source.close()
+      clearTimers()
       process({ type: 'stream-lost' })
     }
 
@@ -146,22 +162,23 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
     source.addEventListener('done', onDone)
     source.addEventListener('error', onError)
 
-    const fallbackTimer = window.setTimeout(() => {
+    fallbackTimer = window.setTimeout(() => {
+      fallbackTimer = null
       process({ type: 'stream-lost' })
     }, SCAN_FALLBACK_AFTER_MS)
-    const maxWaitTimer = window.setTimeout(() => {
+    maxWaitTimer = window.setTimeout(() => {
+      maxWaitTimer = null
       process({ type: 'max-wait', error: { ...MAX_WAIT_ERROR } })
     }, SCAN_MAX_WAIT_MS)
 
     return () => {
       source.close()
-      window.clearTimeout(fallbackTimer)
-      window.clearTimeout(maxWaitTimer)
+      clearTimers()
       if (tickerRef.current !== null) {
         window.cancelAnimationFrame(tickerRef.current)
         tickerRef.current = null
       }
-      revealAnimRef.current?.pause()
+      revealAnimRef.current?.revert()
       revealAnimRef.current = null
     }
   }, [runId, owner, repo, process])
@@ -273,7 +290,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
       revealAnimRef.current = animation
     }
     return () => {
-      revealAnimRef.current?.pause()
+      revealAnimRef.current?.revert()
       revealAnimRef.current = null
     }
   }, [state.phase, reducedMotion])
@@ -339,7 +356,11 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
           scan={placeholder}
           variant="scan"
           className={styles.stage}
-          ariaLabel={`Scanning ${owner}/${repo}: a field of dots while the report is prepared`}
+          ariaLabel={
+            reducedMotion
+              ? `Scanning ${owner}/${repo}: placeholder dots until the scan finishes`
+              : `Scanning ${owner}/${repo}: a field of dots with a sweep line`
+          }
           onEngineReady={handleEngineReady}
         />
       </div>

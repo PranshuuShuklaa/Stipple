@@ -117,7 +117,8 @@ function fallbackImageMarkup(): string {
     dots.push(`<circle cx="${x}" cy="${y}" r="${S / 2}" fill="${fills[i % fills.length]}" />`)
   }
   return (
-    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630">` +
+    `<svg xmlns="http://www.w3.org/2000/svg" width="1200" height="630" viewBox="0 0 1200 630" role="img" aria-label="Stipple social preview">` +
+    `<title>Stipple social preview</title>` +
     `<rect width="1200" height="630" fill="#100C24" />` +
     dots.join('') +
     `</svg>`

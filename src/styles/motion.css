@@ -24,7 +24,9 @@
   *::before,
   *::after {
     animation-duration: 300ms !important;
+    animation-delay: 0ms !important;
     transition-duration: 300ms !important;
+    transition-delay: 0ms !important;
     animation-iteration-count: 1 !important;
     scroll-behavior: auto !important;
   }

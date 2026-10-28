@@ -43,9 +43,9 @@ test('steps down through every layout and back up, ending on files again', async
 test('the files legend shows the real file count on the report stage', async ({ page }) => {
   // The legend line renders as "N files" (string-value match: React splits
   // the number and the unit into separate text nodes, so text() must not
-  // be used inside contains).
-  const legend = page.locator('[class*="legend"]', { hasText: 'files' }).first()
-  await expect(legend).toContainText('1 files')
+  // be used inside contains). One file is singular: "1 file".
+  const legend = page.locator('[class*="legend"]', { hasText: /1 file/ }).first()
+  await expect(legend).toContainText('1 file')
 })
 
 test('the shared dot stage legend lists language swatches for the demo fixture', async ({ page }) => {

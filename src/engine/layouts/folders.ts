@@ -60,25 +60,18 @@ export function calculateFoldersLayout(
     folderCounts.set(f, (folderCounts.get(f) ?? 0) + 1)
   }
 
-  // Sort folders by file count descending
-  const sortedFolders = Array.from(folderCounts.entries()).sort((a, b) => b[1] - a[1])
+  // Sort folders by file count descending, name ascending on ties.
+  const sortedFolders = Array.from(folderCounts.entries()).sort(
+    (a, b) => b[1] - a[1] || a[0].localeCompare(b[0]),
+  )
 
-  // Top 5 folder names
-  const topFolders: string[] = []
-  for (let i = 0; i < 5; i++) {
-    if (i < sortedFolders.length) {
-      topFolders.push(sortedFolders[i][0])
-    } else {
-      topFolders.push(`folder-${i + 1}`)
-    }
-  }
-
+  // A monorepo can have more top-level folders than clusters. Keep the four
+  // biggest as themselves and gather the rest honestly under "Other folders"
+  // instead of showing empty placeholder labels.
+  const hasOther = sortedFolders.length > 5
+  const namedFolders = hasOther ? sortedFolders.slice(0, 4) : sortedFolders
   const folderToSlot = new Map<string, number>()
-  for (let i = 0; i < 4; i++) {
-    if (i < sortedFolders.length) {
-      folderToSlot.set(sortedFolders[i][0], i)
-    }
-  }
+  namedFolders.forEach(([folder], slot) => folderToSlot.set(folder, slot))
 
   // Assign each dot to a folder slot (0..4) and index k within that cluster
   const dotFolder = new Int32Array(n)
@@ -87,7 +80,7 @@ export function calculateFoldersLayout(
 
   for (let i = 0; i < n; i++) {
     const folder = scan.files[i]?.folder || 'root'
-    const slot = folderToSlot.has(folder) ? folderToSlot.get(folder)! : 4
+    const slot = folderToSlot.get(folder) ?? (hasOther ? 4 : 0)
     dotFolder[i] = slot
     dotK[i] = clusterCounts[slot]
     clusterCounts[slot]++
@@ -122,17 +115,29 @@ export function calculateFoldersLayout(
     bArr[i] = cb
   }
 
-  // Create labels
-  const labels: FolderLabel[] = FOLDER_CENTERS.map(([qx, qy], i) => {
-    const count = clusterCounts[i]
-    const name = topFolders[i]
+  // Create labels only for clusters that hold files. A one-folder repo gets
+  // one label, not four invented ones; a monorepo's fifth label is "Other
+  // folders" and its count is the sum of the smaller folders.
+  const labels: FolderLabel[] = namedFolders.map(([folder], slot) => {
+    const [qx, qy] = FOLDER_CENTERS[slot]
+    const count = clusterCounts[slot]
     return {
-      folder: name,
+      folder,
       count,
       x: W * qx,
       y: H * qy - 0.4 * P * Math.sqrt(count) - 10,
     }
   })
+  if (hasOther) {
+    const [qx, qy] = FOLDER_CENTERS[4]
+    const count = clusterCounts[4]
+    labels.push({
+      folder: 'Other folders',
+      count,
+      x: W * qx,
+      y: H * qy - 0.4 * P * Math.sqrt(count) - 10,
+    })
+  }
 
   // Draggable-cluster geometry. The reflow core is deliberately tighter than
   // the visual spiral so the untouched reference layout never pushes itself

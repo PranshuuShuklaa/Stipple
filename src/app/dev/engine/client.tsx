@@ -133,8 +133,8 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
         {/* View Switcher Controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
           <div
-            role="toolbar"
-            aria-label="Visualization Layouts"
+            role="group"
+            aria-label="Visualization layouts"
             style={{
               display: 'flex',
               gap: '8px',

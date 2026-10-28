@@ -135,8 +135,8 @@ export function fallbackCardSpec(owner: string, repo: string): CardSpec {
     }
   })
   return {
-    owner: escapeXmlText(owner),
-    repo: escapeXmlText(repo),
+    owner,
+    repo,
     description: 'Stipple repo summary',
     commits: 0,
     filesCount: 0,
@@ -291,7 +291,7 @@ export function buildCardSvg(spec: CardSpec): CardSvgResult {
 <g transform="translate(305, 108)" class="animate-in">
   <text x="0" y="0" font-size="13" font-weight="600" class="fg">Files: ${spec.filesCount}</text>
   <text x="0" y="22" font-size="13" font-weight="600" class="fg">Commits: ${spec.commits}</text>
-  <text x="0" y="44" font-size="12" font-weight="500" class="dim">Languages: ${spec.languages.map((l) => `${l.name} (${l.percent}%)`).join(', ') || 'None'}</text>
+  <text x="0" y="44" font-size="12" font-weight="500" class="dim">Languages: ${escapeXmlText(spec.languages.map((l) => `${l.name} (${l.percent}%)`).join(', ') || 'None')}</text>
 </g>
 
 </svg>`

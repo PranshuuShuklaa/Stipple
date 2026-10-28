@@ -49,6 +49,18 @@ describe('getRepo', () => {
     expect(repo.pushed_at).toBe('2026-10-10T00:00:00Z')
     expect(repo.license?.spdx_id).toBe('MIT')
     expect(repo.owner.login).toBe('octo')
+    expect(repo.archived).toBe(false)
+  })
+
+  it('reads the archived flag and tolerates a null default branch on an empty repo', async () => {
+    const { fetchImpl } = queueFetch([
+      jsonResponse(200, rawRepo({ archived: true, default_branch: null })),
+    ])
+
+    const repo = await getRepo({ owner: 'octo', repo: 'hello' }, { fetchImpl })
+
+    expect(repo.archived).toBe(true)
+    expect(repo.default_branch).toBe('')
   })
 
   it('attaches the token from the environment when no token is passed', async () => {
@@ -204,6 +216,16 @@ describe('getLanguages', () => {
     const { fetchImpl } = queueFetch([jsonResponse(200, [])])
     const error = await caught(getLanguages({ owner: 'octo', repo: 'hello' }, { fetchImpl }))
     expect((error as UpstreamError).code).toBe('upstream')
+  })
+
+  it('treats a 204 as no language data, not an unreadable answer', async () => {
+    const { fetchImpl } = queueFetch([emptyResponse(204)])
+    await expect(getLanguages({ owner: 'octo', repo: 'hello' }, { fetchImpl })).resolves.toEqual({})
+  })
+
+  it('treats an empty body as no language data', async () => {
+    const { fetchImpl } = queueFetch([new Response('', { status: 200 })])
+    await expect(getLanguages({ owner: 'octo', repo: 'hello' }, { fetchImpl })).resolves.toEqual({})
   })
 })
 

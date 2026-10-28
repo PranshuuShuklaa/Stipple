@@ -81,7 +81,7 @@ export class ShockwaveEffect {
   public reset(): void {
     for (const ring of this.rings) {
       if (ring.animation) {
-        ring.animation.pause()
+        ring.animation.revert()
       }
     }
     this.rings = []

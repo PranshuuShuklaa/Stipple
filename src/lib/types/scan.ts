@@ -44,6 +44,8 @@ export interface Scan {
   defaultBranch: string
   stars: number
   htmlUrl: string
+  /** Archived repos still scan; the report says so instead of hiding it. */
+  archived?: boolean
   files: ScanFile[]
   languages: ScanLanguage[]
   activity: ScanActivityWeek[]

@@ -108,12 +108,11 @@ test('a designed error event shows the error screen with Retry', async ({ page }
 })
 
 test('the status line reads like a human wrote it while the scan waits', async ({ page }) => {
-  // Stage events only, no done event: the screen keeps waiting on the
-  // stream honestly (the 15 s cap guards it after this test ends). The
-  // stage copies land in one chunk in a mock, so the visible state is the
-  // last waiting line — the point of the test is that the line is human
-  // words about scan meaning, never parse internals. Number formatting
-  // ("1,234 files") is covered in tests/unit/scan-flow.test.ts.
+  // Stage events only, no done event: the stream closes and the screen
+  // falls back to the direct request. Hold that request open briefly so
+  // the visible state is the fallback line; the point of the test is that
+  // the line is human words about scan meaning, never parse internals.
+  // Number formatting ("1,234 files") is covered in tests/unit/scan-flow.test.ts.
   await page.route('**/api/scan-progress/**', (route) =>
     route.fulfill({
       status: 200,
@@ -121,9 +120,15 @@ test('the status line reads like a human wrote it while the scan waits', async (
       body: stageList(1_234).map((stage) => streamEvent('stage', stage)).join(''),
     }),
   )
+  await page.route('**/api/repo/**', async (route) => {
+    await new Promise((resolve) => setTimeout(resolve, 3_000))
+    await route.abort()
+  })
 
   await page.goto(SCAN_URL)
   const status = page.getByRole('status')
-  await expect(status).toContainText(/Putting the report together/, { timeout: 10_000 })
+  await expect(status).toContainText(/did not answer\. Loading the data the direct way/, {
+    timeout: 10_000,
+  })
   await expect(status).not.toContainText(/stage|API|event|json/i)
 })

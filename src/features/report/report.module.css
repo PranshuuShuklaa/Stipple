@@ -26,16 +26,18 @@
   flex-direction: column;
   align-items: flex-start;
   justify-content: center;
-  opacity: 0.82;
-  transition: opacity 0.5s linear;
 }
 
-.stepActive {
-  opacity: 1;
-}
-
+/* Inactive steps stay fully readable (AA in both themes); the active step
+ * is marked with --fg instead of low opacity, which made the copy fail. */
 .stepHeadline {
   margin: 0 0 16px;
+  color: var(--dim);
+  transition: color 0.5s linear;
+}
+
+.stepActive .stepHeadline {
+  color: var(--fg);
 }
 
 .stepBody {
@@ -312,6 +314,7 @@
 .badgeImage {
   display: block;
   width: 268px;
+  max-width: 100%;
   height: auto;
 }
 

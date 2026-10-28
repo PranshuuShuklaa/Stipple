@@ -214,6 +214,7 @@ export async function buildScan(owner: string, repo: string, options: BuildScanO
     defaultBranch: repoData.default_branch,
     stars: repoData.stargazers_count,
     htmlUrl: repoData.html_url,
+    archived: repoData.archived,
     files,
     languages,
     activity: activityFromRaw(activityWeeks),
