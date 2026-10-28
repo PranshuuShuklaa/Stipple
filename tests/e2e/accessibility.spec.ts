@@ -53,6 +53,13 @@ test('home has no accessibility violations in light and dark', async ({ page }) 
   await scan(page, 'home dark')
 })
 
+test('development engine stage has no accessibility violations', async ({ page }) => {
+  await prepare(page, 'light')
+  await page.goto('/dev/engine')
+  await expect(page.getByRole('heading', { level: 1, name: 'Dot Engine Dev Stage' })).toBeVisible()
+  await scan(page, 'development engine stage')
+})
+
 test('report has no accessibility violations in light and dark', async ({ page }) => {
   test.setTimeout(120_000)
   await prepare(page, 'light')
@@ -188,6 +195,19 @@ test.describe('keyboard', () => {
     }
   })
 
+  test('a client-side route change moves focus to the main landmark', async ({ page }) => {
+    test.setTimeout(120_000)
+    await prepare(page, 'light')
+    await page.goto('/r/octocat/Hello-World')
+    await expect(page.getByRole('heading', { level: 1 })).toContainText(/Hello/i, {
+      timeout: 60_000,
+    })
+
+    await page.getByRole('link', { name: 'stipple', exact: true }).click()
+    await expect(page).toHaveURL('/')
+    await expect(page.locator('#main-content')).toBeFocused()
+  })
+
   test('folder labels take keyboard focus and arrow keys without scrolling', async ({ page }) => {
     test.setTimeout(120_000)
     await prepare(page, 'light')
@@ -195,13 +215,16 @@ test.describe('keyboard', () => {
     await expect(page.getByRole('heading', { level: 1 })).toContainText(/Hello/i, {
       timeout: 60_000,
     })
-    const label = page.getByRole('button', { name: /files\. Drag to move/i }).first()
-    await page.getByRole('heading', { name: /By folder/i }).scrollIntoViewIfNeeded()
+    const label = page.getByRole('button', { name: /Drag to move/i }).first()
+    await page.locator('[data-step-index="3"]').scrollIntoViewIfNeeded()
+    await expect(label).toBeVisible({ timeout: 10_000 })
     await expect.poll(() => label.evaluate((element) => element.closest('[inert]') === null)).toBe(true)
 
-    await page.keyboard.press('Tab')
-    await page.keyboard.press('Tab')
-    await page.keyboard.press('Tab')
+    // Move focus to the control just before the stage without scrolling the
+    // story back to the top (a normal Tab walk from the page top would).
+    await page
+      .getByRole('button', { name: /Switch to .* theme/i })
+      .evaluate((element) => element.focus({ preventScroll: true }))
     await page.keyboard.press('Tab')
     await expect(label).toBeFocused()
     const ring = await label.evaluate((element) => {
@@ -235,15 +258,17 @@ test.describe('reduced motion', () => {
       const inspect = () => {
         for (const element of document.querySelectorAll('div')) {
           if (
+            element.hasAttribute('data-intro-wordmark') &&
             element.getAttribute('aria-hidden') === 'true' &&
-            element.textContent === 'stipple' &&
-            getComputedStyle(element).position === 'fixed'
+            element.textContent === 'stipple'
           ) {
             probe.fadeSeen = true
           }
         }
       }
-      new MutationObserver(inspect).observe(document.documentElement, {
+      // addInitScript runs before document.documentElement exists; observe the
+      // document node itself so the observer is installed on the first pass.
+      new MutationObserver(inspect).observe(document, {
         childList: true,
         subtree: true,
         characterData: true,
@@ -287,6 +312,18 @@ test.describe('reduced motion', () => {
   })
 })
 
+test.describe('no JavaScript', () => {
+  test.use({ javaScriptEnabled: false })
+
+  test('the home page is readable and the intro overlay is hidden', async ({ page }) => {
+    await page.goto('/')
+    await expect(page.getByRole('heading', { level: 1 })).toBeVisible()
+    await expect(page.locator('[data-intro-overlay]')).toBeHidden()
+    await expect(page.getByRole('button', { name: /theme/i })).toHaveCount(0)
+    await expect(page.getByLabel(/GitHub repository/i)).toBeVisible()
+  })
+})
+
 interface TabStop {
   key: string
   tag: string
@@ -310,6 +347,18 @@ async function tabStops(page: Page, limit = 40): Promise<TabStop[]> {
       ) {
         return null
       }
+      // The Next.js dev-tools indicator is a shadow-DOM host, not page UI.
+      // Skip it without ending the walk.
+      if (element.closest('nextjs-portal') !== null) {
+        return {
+          key: '__nextjs_dev_portal__',
+          tag: 'nextjs-portal',
+          name: '',
+          ring: true,
+          ringStyle: 'solid',
+          ringWidth: '2px',
+        }
+      }
       const ringed = (node: HTMLElement) => {
         const style = getComputedStyle(node)
         return style.outlineStyle !== 'none' && parseFloat(style.outlineWidth) >= 2
@@ -318,12 +367,12 @@ async function tabStops(page: Page, limit = 40): Promise<TabStop[]> {
         ? element
         : (Array.from(element.querySelectorAll<HTMLElement>('*')).find(ringed) ?? null)
       const style = holder ? getComputedStyle(holder) : null
+      const imageAlt = element.querySelector('img')?.getAttribute('alt') ?? ''
+      const text = element.textContent?.replace(/\s+/g, ' ').trim() ?? ''
       const label =
-        element.getAttribute('aria-label') ??
-        element.textContent?.replace(/\s+/g, ' ').trim().slice(0, 60) ??
-        ''
+        element.getAttribute('aria-label') ?? `${imageAlt} ${text}`.trim().slice(0, 80)
       return {
-        key: `${element.tagName}:${element.id}:${label}`,
+        key: `${element.tagName}:${element.id}:${element.getAttribute('href') ?? ''}:${label}`,
         tag: element.tagName.toLowerCase(),
         name: label,
         ring: holder !== null,
@@ -331,7 +380,9 @@ async function tabStops(page: Page, limit = 40): Promise<TabStop[]> {
         ringWidth: style?.outlineWidth ?? '0px',
       }
     })
-    if (!stop || stops.some((seen) => seen.key === stop.key)) break
+    if (!stop) break
+    if (stop.key === '__nextjs_dev_portal__') continue
+    if (stops.some((seen) => seen.key === stop.key)) break
     stops.push(stop)
   }
   return stops

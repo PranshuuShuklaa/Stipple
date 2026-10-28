@@ -336,14 +336,12 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       const wm = document.createElement('div')
       wm.className = styles.wordmarkFade
       wm.setAttribute('aria-hidden', 'true')
+      wm.setAttribute('data-intro-wordmark', '')
       const txt = document.createElement('p')
       txt.className = styles.wordmark
       txt.textContent = 'stipple'
       wm.appendChild(txt)
       document.body.appendChild(wm)
-
-      // Whatever happens, this visit has now seen the intro
-      sessionStorage.setItem(SESSION_KEY, '1')
 
       const fadeIn = animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
       const fadeOut = animate(txt, {
@@ -352,6 +350,11 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
         ease: 'linear',
         delay: 150,
         onComplete: () => {
+          // Mark the visit complete only after the fade. In development
+          // Strict Mode React deliberately mounts, cleans up, and mounts
+          // effects again; marking it earlier would suppress the replayed
+          // fade entirely.
+          sessionStorage.setItem(SESSION_KEY, '1')
           wm.remove()
           onDone()
         },
@@ -695,7 +698,12 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
 
   return (
     <>
-      <div ref={overlayRef} className={styles.overlay} aria-hidden="true">
+      <div
+        ref={overlayRef}
+        className={styles.overlay}
+        aria-hidden="true"
+        data-intro-overlay=""
+      >
         {/* Dark background div – faded out during handoff */}
         <div className={styles.overlayBg} />
         <canvas ref={canvasRef} className={styles.canvas} />
@@ -705,7 +713,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       </div>
       {/* Accessible status: outside the aria-hidden overlay, since hidden
           subtrees are not announced by screen readers */}
-      <span className={styles.srOnly} role="status">
+      <span className={styles.srOnly} role="status" data-intro-status="">
         Loading Stipple
       </span>
     </>

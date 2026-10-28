@@ -54,7 +54,6 @@ export default function HomePage() {
           <h1
             ref={headlineRef}
             className={`${styles.headline} type-display`}
-            style={introDone ? undefined : { opacity: 0 }}
           >
             Your repo, <br />one dot per file.
           </h1>

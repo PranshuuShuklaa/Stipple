@@ -1,8 +1,9 @@
 import type { Metadata } from 'next'
-import type { ReactNode } from 'react'
+import { Suspense, type ReactNode } from 'react'
 import Link from 'next/link'
 import { Familjen_Grotesk } from 'next/font/google'
 
+import { RouteFocus } from '@/components/ui/route-focus'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
 
 import '@/styles/tokens.css'
@@ -46,8 +47,14 @@ export default function RootLayout({
     <html lang="en" className={fontSans.variable} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBeforePaint }} />
+        <noscript>
+          <style>{`[data-intro-overlay], [data-intro-status], [data-theme-toggle] { display: none !important; }`}</style>
+        </noscript>
       </head>
       <body>
+        <Suspense fallback={null}>
+          <RouteFocus />
+        </Suspense>
         <header className="site-header">
           <a className="skip-link" href="#main-content">
             Skip to content

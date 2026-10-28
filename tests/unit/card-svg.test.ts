@@ -44,6 +44,8 @@ describe('card-svg generator', () => {
     expect(result.svg).toContain('<desc>')
     expect(result.svg).toContain('@media (prefers-color-scheme: dark)')
     expect(result.svg).toContain('@media (prefers-reduced-motion: reduce)')
+    expect(result.svg).toContain('class="dot c')
+    expect(result.svg).not.toMatch(/<circle[^>]*class="dot [^"]*"[^>]*\bfill=/)
     expect(result.svg).toContain('dotAssemble')
     expect(result.svg).toContain('ringDraw')
     expect(result.svg).toContain('Files: 3')
