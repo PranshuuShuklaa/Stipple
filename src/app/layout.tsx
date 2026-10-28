@@ -1,7 +1,7 @@
 import type { Metadata } from 'next'
 import { Suspense, type ReactNode } from 'react'
 import Link from 'next/link'
-import { Familjen_Grotesk } from 'next/font/google'
+import localFont from 'next/font/local'
 
 import { RouteFocus } from '@/components/ui/route-focus'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
@@ -10,9 +10,19 @@ import '@/styles/tokens.css'
 import '@/styles/base.css'
 import '@/styles/motion.css'
 
-const fontSans = Familjen_Grotesk({
-  subsets: ['latin'],
-  weight: ['400', '600'],
+const fontSans = localFont({
+  src: [
+    {
+      path: '../../public/fonts/familjen-grotesk-400.ttf',
+      weight: '400',
+      style: 'normal',
+    },
+    {
+      path: '../../public/fonts/familjen-grotesk-600.ttf',
+      weight: '600',
+      style: 'normal',
+    },
+  ],
   display: 'swap',
   variable: '--font-sans',
 })
