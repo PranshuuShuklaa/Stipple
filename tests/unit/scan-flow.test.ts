@@ -65,14 +65,19 @@ describe('processScanFlowEvent (stream with stages)', () => {
     expect(state.phase).toBe('revealing')
   })
 
-  it('ignores stream failures after any stage event arrived (the 15s cap still guards the run)', () => {
+  it('falls back when the stream drops after partial progress, so offline mid-scan ends in the network state', () => {
     let state = initialScanFlowState()
     state = processScanFlowEvent(state, { type: 'stage', stage: 'tree', files: 5 })
     state = processScanFlowEvent(state, { type: 'stream-lost' })
-    expect(state.phase).toBe('streaming')
+    expect(state.phase).toBe('fallback')
+    expect(state.files).toBe(5)
+
+    state = processScanFlowEvent(state, { type: 'designed-error', error: NETWORK_LOST_ERROR })
+    expect(state.phase).toBe('error')
+    expect(state.error?.code).toBe('network_lost')
   })
 
-  it('falls back only from a silent stream: no stage events within the window', () => {
+  it('falls back from a silent stream too', () => {
     let state = initialScanFlowState()
     state = processScanFlowEvent(state, { type: 'stream-lost' })
     expect(state.phase).toBe('fallback')

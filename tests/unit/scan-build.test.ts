@@ -158,6 +158,7 @@ describe('buildScan (happy path)', () => {
     expect(scan.defaultBranch).toBe('main')
     expect(scan.stars).toBe(2153)
     expect(scan.htmlUrl).toBe('https://github.com/octo/hello')
+    expect(scan.archived).toBe(false)
     expect(scan.scannedAt).toBe(NOW.toISOString())
   })
 
@@ -385,6 +386,21 @@ describe('buildScan (degradations)', () => {
 
     const scan = await buildScan(OWNER, REPO, optionsFor(router, null))
     expect(scan.flags.truncated).toBe(true)
+  })
+
+  it('carries the archived flag so the report can say the repo is archived', async () => {
+    const router = routerFetch([
+      repoRoute(rawRepo({ archived: true })),
+      treeRoute({}),
+      languagesRoute({ JavaScript: 2000 }),
+      ...statsRoutes(),
+      communityRoute(),
+      contentsRoute({}),
+    ])
+
+    const scan = await buildScan(OWNER, REPO, optionsFor(router, null))
+
+    expect(scan.archived).toBe(true)
   })
 
   it('sends no Authorization header when no token exists', async () => {

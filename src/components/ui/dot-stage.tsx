@@ -438,7 +438,10 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
           {currentLayout === 'files' && (
             <>
               <span>
-                {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length} files
+                {stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length}{' '}
+                {(stats && stats.totalFiles > 0 ? stats.totalFiles : scan.files.length) === 1
+                  ? 'file'
+                  : 'files'}
                 {stats && stats.filesPerDot > 1 ? ` · one dot = ${stats.filesPerDot} files` : ''}
               </span>
               {languageStats.length > 0 &&
@@ -451,14 +454,17 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
             </>
           )}
 
-          {currentLayout === 'languages' && (
-            languageStats.map((item) => (
-              <span key={item.name} className={styles.legendItem}>
-                <i className={styles.swatch} style={{ background: item.colorVar }} />
-                {item.name} {item.pct}%
-              </span>
-            ))
-          )}
+          {currentLayout === 'languages' &&
+            (languageStats.length > 0 ? (
+              languageStats.map((item) => (
+                <span key={item.name} className={styles.legendItem}>
+                  <i className={styles.swatch} style={{ background: item.colorVar }} />
+                  {item.name} {item.pct}%
+                </span>
+              ))
+            ) : (
+              <span className={styles.legendItem}>No language data for this repo.</span>
+            ))}
 
           {currentLayout === 'activity' && (
             <span className={styles.legendItem}>

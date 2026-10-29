@@ -80,6 +80,13 @@ describe('files headlines and bodies', () => {
     expect(filesBody(scan)).toContain('Every file is one dot')
   })
 
+  it('uses the singular for a one-file repo', () => {
+    const scan = baseScan({
+      files: [{ path: 'README.md', name: 'README.md', size: 10, language: null, folder: '(root)' }],
+    })
+    expect(filesHeadline(scan)).toBe('1 file.')
+  })
+
   it('says the scan is partial when the tree is truncated', () => {
     const scan = baseScan({ flags: { truncated: true, statsPending: false }, files: Array.from({ length: 120_000 }, (_, i) => ({
       path: `s/f${i}.ts`, name: `f${i}.ts`, size: 10, language: 'TypeScript', folder: 's',
@@ -217,6 +224,18 @@ describe('biggestFolder and folder headlines', () => {
       ],
     })
     expect(biggestFolder(scan)).toEqual({ folder: 'alpha', count: 1 })
+  })
+
+  it('explains the grouped cluster in a monorepo', () => {
+    const scan = baseScan({
+      files: ['app', 'web', 'api', 'docs', 'infra', 'tools', 'scripts'].flatMap((folder, folderIndex) =>
+        Array.from({ length: 10 - folderIndex }, (_, i) => ({
+          path: `${folder}/${i}.ts`, name: `${i}.ts`, size: 1, language: null, folder,
+        })),
+      ),
+    })
+    expect(foldersHeadline(scan)).toBe('app is the biggest folder.')
+    expect(foldersBody(scan)).toContain('last cluster gathers the smaller top-level folders')
   })
 
   it('says no folders exist when everything is in the root', () => {

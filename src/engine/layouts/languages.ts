@@ -52,6 +52,7 @@ export function calculateLanguagesLayout(
   const bArr = new Uint8ClampedArray(n)
 
   const themeColors = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
+  const hasLanguages = scan.languages.length > 0
 
   const maxCols = Math.max(20, Math.ceil(n / 12))
   const rows = 12
@@ -67,7 +68,7 @@ export function calculateLanguagesLayout(
     alpha[i] = 1.0
 
     const langIdx = languageIndexFor(scan.files[i]?.language)
-    const [cr, cg, cb] = themeColors[langIdx] ?? theme.c5
+    const [cr, cg, cb] = hasLanguages ? themeColors[langIdx] ?? theme.c5 : theme.fg
     rArr[i] = cr
     gArr[i] = cg
     bArr[i] = cb

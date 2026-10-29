@@ -2,15 +2,8 @@ import { Suspense } from 'react'
 import type { Metadata } from 'next'
 
 import { getScanCached } from '@/server/cache'
-import { formatCount } from '@/features/report/step-headlines'
-import { Story } from '@/features/report/story'
-import { StageDataTable } from '@/features/report/stage-data-table'
-import { HealthSection } from '@/features/report/health-section'
-import { NumbersSection } from '@/features/report/numbers-section'
-import { DependenciesSection } from '@/features/report/dependencies-section'
-import { ShareSection } from '@/features/report/share-section'
 import { ReportError } from '@/features/report/report-error'
-import reportStyles from '@/features/report/report.module.css'
+import { ReportView } from '@/features/report/report-view'
 import styles from './page.module.css'
 
 /**
@@ -77,32 +70,5 @@ async function ReportContent({ params }: ReportParams) {
   if (!result.ok) {
     return <ReportError owner={owner} repo={repo} error={result.error} />
   }
-  const scan = result.scan
-
-  return (
-    <>
-      <header className={styles.head}>
-        <h1 className={`type-display ${styles.title}`}>{scan.name}.</h1>
-        <p className={`type-small tabular ${styles.meta}`}>
-          {scan.owner}/{scan.name} · {scan.defaultBranch} · {formatCount(scan.stars)} stars
-        </p>
-        {scan.description !== '' && <p className={styles.description}>{scan.description}</p>}
-        {scan.flags.truncated && (
-          <p className={styles.truncated}>
-            GitHub cut the file list short for this repo. The dots scan what arrived.
-          </p>
-        )}
-      </header>
-
-      <Story scan={scan} />
-      <StageDataTable scan={scan} />
-
-      <div className={reportStyles.sections}>
-        <HealthSection scan={scan} />
-        <NumbersSection scan={scan} />
-        <DependenciesSection scan={scan} />
-        <ShareSection scan={scan} />
-      </div>
-    </>
-  )
+  return <ReportView scan={result.scan} />
 }

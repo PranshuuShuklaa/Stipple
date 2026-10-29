@@ -26,12 +26,12 @@
   margin: 0 0 10px;
 }
 
-.truncated {
+.note {
   max-width: 60ch;
   font-size: 15px;
   line-height: 1.4;
   color: var(--dim);
-  margin: 0;
+  margin: 0 0 8px;
 }
 
 .pending {

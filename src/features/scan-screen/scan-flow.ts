@@ -117,7 +117,10 @@ export function processScanFlowEvent(state: ScanFlowState, event: ScanFlowEvent)
     }
 
     case 'stream-lost': {
-      if (state.phase !== 'streaming' || state.stagesCompleted > 0) return state
+      // A drop after partial progress is still a drop: try the direct
+      // request so an offline mid-scan ends in the network-lost state
+      // instead of sitting on the sweep until the 15 s cap.
+      if (state.phase !== 'streaming') return state
       return { ...state, phase: 'fallback' }
     }
 

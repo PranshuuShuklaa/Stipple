@@ -58,8 +58,9 @@ export function filesPerDot(totalFiles: number): number {
 export function filesHeadline(scan: Scan): string {
   const total = scan.files.length
   if (total === 0) return 'No files were counted.'
-  if (scan.flags.truncated) return `First ${formatCount(total)} files.`
-  return `${formatCount(total)} files.`
+  const noun = total === 1 ? 'file' : 'files'
+  if (scan.flags.truncated) return `First ${formatCount(total)} ${noun}.`
+  return `${formatCount(total)} ${noun}.`
 }
 
 export function filesBody(scan: Scan): string {
@@ -192,6 +193,14 @@ export function foldersBody(scan: Scan): string {
   const winner = biggestFolder(scan)
   if (!winner) return 'No top-level folders to cluster for this repo.'
   const total = scan.files.length
+  const folderCount = new Set(
+    scan.files
+      .map((file) => file.folder || ROOT_FOLDER)
+      .filter((folder) => folder !== ROOT_FOLDER),
+  ).size
+  if (folderCount > 5) {
+    return `${formatCount(winner.count)} of ${formatCount(total)} files live there. The last cluster gathers the smaller top-level folders.`
+  }
   return `${formatCount(winner.count)} of ${formatCount(total)} files live there. The other clusters are top-level folders too.`
 }
 

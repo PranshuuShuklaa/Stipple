@@ -194,9 +194,12 @@ export async function getRepo(ref: GithubRepoRef, options: GithubHttpOptions = {
     name: readString(body, 'name'),
     full_name: readString(body, 'full_name'),
     description: (body['description'] as string | null) ?? null,
-    default_branch: readString(body, 'default_branch'),
+    // An empty repository can still report a null default branch; the
+    // scan falls back to HEAD, so a missing name is not an upstream error.
+    default_branch: typeof body['default_branch'] === 'string' ? body['default_branch'] : '',
     stargazers_count: readNumber(body, 'stargazers_count'),
     html_url: readString(body, 'html_url'),
+    archived: body['archived'] === true,
     pushed_at: (body['pushed_at'] as string | null) ?? null,
     license: body['license']
       ? {
@@ -248,7 +251,17 @@ export async function getTree(ref: GithubRepoRef, branch: string, options: Githu
 /** GET /repos/{owner}/{repo}/languages — language name to byte count. */
 export async function getLanguages(ref: GithubRepoRef, options: GithubHttpOptions = {}): Promise<RawLanguages> {
   const res = await githubRequest(repoPath(ref, '/languages'), ref, options)
-  const body = await res.json()
+  // GitHub answers 204 for repos with no counted language bytes. That is a
+  // designed "no languages" state, not an unreadable answer.
+  if (res.status === 204) return {}
+  const text = await res.text()
+  if (text.trim() === '') return {}
+  let body: unknown
+  try {
+    body = JSON.parse(text)
+  } catch {
+    throw new UpstreamError('GitHub sent an answer we could not read.')
+  }
   if (typeof body !== 'object' || body === null || Array.isArray(body)) {
     throw new UpstreamError('GitHub sent an answer we could not read.')
   }

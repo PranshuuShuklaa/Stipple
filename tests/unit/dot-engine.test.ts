@@ -192,6 +192,25 @@ describe('Languages Layout Math', () => {
       expect(match).toBe(true)
     }
   })
+
+  it('keeps neutral fg dots when the repo has no languages', () => {
+    const scan = createScanFixture('octocat/Hello-World')
+    const untyped: Scan = {
+      ...scan,
+      files: [
+        { path: 'README', name: 'README', size: 10, language: null, folder: '(root)' },
+        { path: 'main', name: 'main', size: 4, language: null, folder: '(root)' },
+      ],
+      languages: [],
+    }
+    const layout = calculateLanguagesLayout(untyped, { width: 960, height: 540 }, theme)
+
+    for (let i = 0; i < layout.dotCount; i++) {
+      expect(layout.r[i]).toBe(theme.fg[0])
+      expect(layout.g[i]).toBe(theme.fg[1])
+      expect(layout.b[i]).toBe(theme.fg[2])
+    }
+  })
 })
 
 describe('Activity Layout Math', () => {
@@ -243,6 +262,51 @@ describe('Folders Layout Math', () => {
 
     const labelSum = layout.labels.reduce((acc, curr) => acc + curr.count, 0)
     expect(labelSum).toBe(240)
+  })
+
+  it('labels only the folders that exist (one-file repo gets one label)', () => {
+    const scan = createScanFixture('octocat/Hello-World')
+    const oneFile: Scan = {
+      ...scan,
+      files: [{ path: 'README', name: 'README', size: 10, language: null, folder: '(root)' }],
+    }
+    const layout = calculateFoldersLayout(oneFile, { width: 960, height: 540 }, theme)
+
+    expect(layout.labels).toHaveLength(1)
+    expect(layout.labels[0]).toMatchObject({ folder: '(root)', count: 1 })
+    expect(layout.clusterOf[0]).toBe(0)
+  })
+
+  it('groups folders beyond the fifth as Other folders in a monorepo', () => {
+    const scan = createScanFixture('stipple/stipple')
+    const folders = ['app', 'web', 'api', 'docs', 'infra', 'tools', 'scripts']
+    const monorepo: Scan = {
+      ...scan,
+      files: folders.flatMap((folder, folderIndex) =>
+        Array.from({ length: 10 - folderIndex }, (_, i) => ({
+          path: `${folder}/${i}.ts`,
+          name: `${i}.ts`,
+          size: 1,
+          language: null,
+          folder,
+        })),
+      ),
+    }
+    const layout = calculateFoldersLayout(monorepo, { width: 960, height: 540 }, theme)
+
+    expect(layout.labels).toHaveLength(5)
+    expect(layout.labels.map((label) => label.folder)).toEqual([
+      'app',
+      'web',
+      'api',
+      'docs',
+      'Other folders',
+    ])
+    const other = layout.labels[4]!
+    expect(other.count).toBe(monorepo.files.filter((file) => ['infra', 'tools', 'scripts'].includes(file.folder)).length)
+    expect(layout.labels.reduce((sum, label) => sum + label.count, 0)).toBe(monorepo.files.length)
+    const otherFile = monorepo.files.findIndex((file) => file.folder === 'scripts')
+    expect(layout.clusterOf[otherFile]).toBe(4)
   })
 
   it('exposes drag geometry for all five clusters', () => {
