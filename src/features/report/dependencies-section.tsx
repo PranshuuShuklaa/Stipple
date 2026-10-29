@@ -40,8 +40,12 @@ export function DependenciesSection({ scan }: { scan: Scan }) {
   }, [visible, reducedMotion])
 
   return (
-    <section id="dependencies" ref={sectionRef}>
-      <RiseText text="Dependencies." className={`type-section ${styles.sectionHeadline}`} />
+    <section id="dependencies" aria-labelledby="dependencies-heading" ref={sectionRef}>
+      <RiseText
+        id="dependencies-heading"
+        text="Dependencies."
+        className={`type-section ${styles.sectionHeadline}`}
+      />
       {chips.length === 0 ? (
         <p className={styles.sectionBody}>
           No dependency manifest at the repo root. Stipple reads package.json, requirements.txt,

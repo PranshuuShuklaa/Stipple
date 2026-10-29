@@ -290,7 +290,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
     const resetNote =
       code === 'rate_limited' && state.error?.resetAt ? rateLimitResetCopy(state.error.resetAt) : ''
     return (
-      <div className="shell">
+      <div className="shell" role="alert">
         <h1 className="type-section">{scanErrorTitle(code)}</h1>
         <p className={styles.errorBody}>
           github.com/{owner}/{repo}: {message}
@@ -325,7 +325,11 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
           scan={placeholder}
           variant="scan"
           className={styles.stage}
-          ariaLabel={`Scanning ${owner}/${repo}: a sweep line over gray dots`}
+          ariaLabel={
+            reducedMotion
+              ? `Scanning ${owner}/${repo}: placeholder dots until the scan finishes`
+              : `Scanning ${owner}/${repo}: a sweep line over gray dots`
+          }
           onEngineReady={handleEngineReady}
         />
       </div>

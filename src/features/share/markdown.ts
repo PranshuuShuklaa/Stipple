@@ -62,9 +62,14 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     }
   }
   if (typeof document === 'undefined') return false
+  const previousFocus =
+    document.activeElement instanceof HTMLElement ? document.activeElement : null
   try {
     const textarea = document.createElement('textarea')
     textarea.value = text
+    textarea.setAttribute('readonly', '')
+    textarea.setAttribute('aria-hidden', 'true')
+    textarea.tabIndex = -1
     textarea.style.position = 'fixed'
     textarea.style.opacity = '0'
     document.body.appendChild(textarea)
@@ -72,8 +77,10 @@ export async function copyToClipboard(text: string): Promise<boolean> {
     textarea.select()
     const successful = document.execCommand('copy')
     document.body.removeChild(textarea)
+    previousFocus?.focus()
     return successful
   } catch {
+    previousFocus?.focus()
     return false
   }
 }

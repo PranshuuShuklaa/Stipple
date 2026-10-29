@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback, useId, type KeyboardEvent as ReactKeyboardEvent } from 'react'
+import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback, useId, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { animate, stagger, createDraggable, type Draggable } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
@@ -40,8 +40,14 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function subscribeReducedMotion(onChange: () => void): () => void {
+  const query = window.matchMedia('(prefers-reduced-motion: reduce)')
+  query.addEventListener('change', onChange)
+  return () => query.removeEventListener('change', onChange)
+}
+
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel = 'Repository file visualization as a field of dots', initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady, labelMode = 'animate' },
+  { scan, className, ariaLabel, initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady, labelMode = 'animate' },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
@@ -64,6 +70,16 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     filesPerDot: number
   } | null>(null)
   const isDev = process.env.NODE_ENV !== 'production'
+  const reducedMotion = useSyncExternalStore(
+    subscribeReducedMotion,
+    () => window.matchMedia('(prefers-reduced-motion: reduce)').matches,
+    () => false,
+  )
+  const resolvedAriaLabel =
+    ariaLabel ??
+    `Repository visual for ${scan.owner}/${scan.name}: ${scan.files.length.toLocaleString(
+      'en-US',
+    )} files drawn as a field of dots`
 
   const readEngineStats = useCallback(() => {
     const engine = engineRef.current
@@ -88,12 +104,20 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
   // already drives it.
   const applyClusterOffsets = useCallback((offsets: Float32Array, activeSlot: number) => {
     const instances = draggablesRef.current
-    for (let slot = 0; slot < instances.length; slot++) {
+    const buttons = labelsRef.current?.querySelectorAll<HTMLButtonElement>('button')
+    const count = Math.floor(offsets.length / 2)
+    for (let slot = 0; slot < count; slot++) {
       if (slot === activeSlot) continue
+      const x = offsets[slot * 2] ?? 0
+      const y = offsets[slot * 2 + 1] ?? 0
       const instance = instances[slot]
-      if (!instance) continue
-      instance.setX(offsets[slot * 2] ?? 0, true)
-      instance.setY(offsets[slot * 2 + 1] ?? 0, true)
+      if (instance) {
+        instance.setX(x, true)
+        instance.setY(y, true)
+      } else {
+        const button = buttons?.[slot]
+        if (button) button.style.transform = `translate(${x}px, ${y}px)`
+      }
     }
   }, [])
 
@@ -264,6 +288,12 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       return
     }
 
+    if (reducedMotion) {
+      draggablesRef.current = []
+      applyClusterOffsets(engine.getClusterOffsets(), -1)
+      return
+    }
+
     const instances = folderLabels.map((label, slot) => {
       const element = labelButtonsRef.current.get(label.folder)
       if (!element) return null
@@ -301,7 +331,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       for (const instance of instances) instance?.revert()
       draggablesRef.current = []
     }
-  }, [folderLabels])
+  }, [folderLabels, reducedMotion, applyClusterOffsets])
 
   const stageClassName = className ? `${styles.stage} ${className}` : styles.stage
 
@@ -321,7 +351,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         ref={canvasRef}
         className={styles.canvas}
         role="img"
-        aria-label={ariaLabel}
+        aria-label={resolvedAriaLabel}
       />
 
       {/* Dev-only quality overlay (fps, tier, dot count) */}
@@ -353,8 +383,12 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
                 if (element) labelButtonsRef.current.set(l.folder, element)
                 else labelButtonsRef.current.delete(l.folder)
               }}
-              className={styles.lab}
-              aria-label={`${l.folder}, ${l.count} files. Drag to move, or use the arrow keys.`}
+              className={reducedMotion ? `${styles.lab} ${styles.labStatic}` : styles.lab}
+              aria-label={
+                reducedMotion
+                  ? `${l.folder}, ${l.count} files. Use the arrow keys to move it.`
+                  : `${l.folder}, ${l.count} files. Drag to move, or use the arrow keys.`
+              }
               aria-describedby={folderHelpId}
               onKeyDown={(event) => handleLabelKeyDown(event, slot)}
             >
@@ -371,11 +405,15 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       {folderLabels && folderLabels.length > 0 && (
         <>
           <p id={folderHelpId} className="visually-hidden">
-            Folder clusters can be dragged. With the keyboard, focus a folder label and use the
+            Folder clusters can be moved. With the keyboard, focus a folder label and use the
             arrow keys to nudge it. Reset layout returns every cluster to its place.
           </p>
           <div className={styles.clusterTools}>
-            <span className={styles.clusterHint}>Drag a label to move its cluster.</span>
+            <span className={styles.clusterHint}>
+              {reducedMotion
+                ? 'Use the arrow keys to move a focused label.'
+                : 'Drag a label to move its cluster.'}
+            </span>
             <button
               type="button"
               className={styles.resetButton}
@@ -392,7 +430,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
 
       {/* Legend bottom left */}
       {variant === 'full' && (
-        <div className={styles.legend} aria-hidden="true">
+        <div className={styles.legend} role="group" aria-label="Visualization legend">
           {currentLayout === 'files' && (
             <>
               <span>

@@ -25,9 +25,13 @@
 }
 
 .lab {
-  display: block;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 24px;
+  min-height: 24px;
   margin: 0;
-  padding: 0;
+  padding: 0 4px;
   border: 0;
   background: none;
   color: var(--fg);
@@ -45,6 +49,11 @@
 
 .lab:active {
   cursor: grabbing;
+}
+
+.labStatic,
+.labStatic:active {
+  cursor: default;
 }
 
 .labPos {

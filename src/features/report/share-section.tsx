@@ -37,8 +37,16 @@ export function ShareSection({ scan }: { scan: Scan }) {
   const quality = useQualityTier()
 
   const [copiedKey, setCopiedKey] = useState<string | null>(null)
+  const [copyMessage, setCopyMessage] = useState('')
   const [copyPulse, setCopyPulse] = useState(0)
   const [siteUrl] = useState(() => getSiteUrl())
+
+  const copyLabels: Record<string, string> = {
+    link: 'Report link',
+    badge: 'Badge Markdown',
+    card: 'Card Markdown',
+    summary: 'Summary block',
+  }
 
   const plainMotion = reducedMotion || quality === 'low'
   const motionEnabled = !plainMotion
@@ -107,15 +115,26 @@ export function ShareSection({ scan }: { scan: Scan }) {
     button: HTMLButtonElement,
   ) => {
     const success = await copyToClipboard(text)
-    if (!success) return
-
-    copiedButtonRef.current = button
-    setCopiedKey(key)
     if (copyTimerRef.current !== null) {
       window.clearTimeout(copyTimerRef.current)
     }
+
+    if (!success) {
+      setCopiedKey(null)
+      setCopyMessage('Copy failed. Select the text and copy it manually.')
+      copyTimerRef.current = window.setTimeout(() => {
+        setCopyMessage('')
+        copyTimerRef.current = null
+      }, 4000)
+      return
+    }
+
+    copiedButtonRef.current = button
+    setCopiedKey(key)
+    setCopyMessage(`${copyLabels[key] ?? 'Text'} copied to the clipboard.`)
     copyTimerRef.current = window.setTimeout(() => {
       setCopiedKey((curr) => (curr === key ? null : curr))
+      setCopyMessage('')
       copyTimerRef.current = null
     }, 1600)
 
@@ -125,16 +144,24 @@ export function ShareSection({ scan }: { scan: Scan }) {
   }
 
   return (
-    <section id="share" ref={sectionRef} className={styles.shareSection}>
+    <section
+      id="share"
+      aria-labelledby="share-heading"
+      ref={sectionRef}
+      className={styles.shareSection}
+    >
       <LinkForge
         ref={forgeRef}
         badgeRef={badgeImageRef}
         active={visible && motionEnabled}
         band={band}
       />
-      <RiseText text="Share." className={`type-section ${styles.sectionHeadline}`} />
+      <RiseText id="share-heading" text="Share." className={`type-section ${styles.sectionHeadline}`} />
       <p className={styles.sectionBody}>
         Embed this repo&apos;s live health badge and animated card in your README, or share the story link.
+      </p>
+      <p className="visually-hidden" role="status" aria-live="polite">
+        {copyMessage}
       </p>
 
       <div className={styles.sharePreviews} ref={badgePreviewRef}>
@@ -146,15 +173,23 @@ export function ShareSection({ scan }: { scan: Scan }) {
               ref={badgeImageRef}
               className={styles.badgeImage}
               src={badgeApiUrl}
-              alt={`${scan.owner}/${scan.name} Stipple health badge`}
+              alt={`${scan.owner}/${scan.name} Stipple health badge: ${scan.health.score} out of 100`}
             />
+            <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
         <div className={styles.previewCard}>
           <p className={styles.previewLabel}>Animated README card</p>
           <a href={reportUrl} target="_blank" rel="noopener noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={cardApiUrl} alt={`${scan.owner}/${scan.name} Stipple animated card`} width="300" height="120" style={{ maxWidth: '100%', height: 'auto' }} />
+            <img
+              src={cardApiUrl}
+              alt={`${scan.owner}/${scan.name} Stipple animated card: ${scan.files.length.toLocaleString('en-US')} files, health ${scan.health.score} out of 100`}
+              width="300"
+              height="120"
+              style={{ maxWidth: '100%', height: 'auto' }}
+            />
+            <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
       </div>

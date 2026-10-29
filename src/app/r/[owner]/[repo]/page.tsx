@@ -56,7 +56,13 @@ export default function ReportPage({ params }: ReportParams) {
   return (
     <div className={styles.wrap}>
       <div className="shell">
-        <Suspense fallback={<p className={styles.pending}>Loading the report…</p>}>
+        <Suspense
+          fallback={
+            <p className={styles.pending} role="status">
+              Loading the report…
+            </p>
+          }
+        >
           <ReportContent params={params} />
         </Suspense>
       </div>

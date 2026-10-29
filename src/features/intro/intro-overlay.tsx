@@ -335,6 +335,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     if (reducedMotion) {
       const wm = document.createElement('div')
       wm.className = styles.wordmarkFade
+      wm.setAttribute('aria-hidden', 'true')
       const txt = document.createElement('p')
       txt.className = styles.wordmark
       txt.textContent = 'stipple'
@@ -344,21 +345,38 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       // Whatever happens, this visit has now seen the intro
       sessionStorage.setItem(SESSION_KEY, '1')
 
+      let finished = false
+      const finish = () => {
+        if (finished) return
+        finished = true
+        fadeIn.pause()
+        fadeOut.pause()
+        removeSkipListeners()
+        wm.remove()
+        onDone()
+      }
+      const skipEvents = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const
+      const removeSkipListeners = () => {
+        for (const event of skipEvents) window.removeEventListener(event, finish)
+      }
+
       const fadeIn = animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
       const fadeOut = animate(txt, {
         opacity: [1, 0],
         duration: 150,
         ease: 'linear',
         delay: 150,
-        onComplete: () => {
-          wm.remove()
-          onDone()
-        },
+        onComplete: finish,
       })
+
+      for (const event of skipEvents) {
+        window.addEventListener(event, finish, { once: true, passive: true })
+      }
 
       // If the component is unmounted mid-fade: stop both animations and
       // take the self-created wordmark div with us (no cleanup = leaked node)
       return () => {
+        removeSkipListeners()
         fadeIn.pause()
         fadeOut.pause()
         wm.remove()
@@ -705,7 +723,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       {/* Accessible status: outside the aria-hidden overlay, since hidden
           subtrees are not announced by screen readers */}
       <span className={styles.srOnly} role="status">
-        Loading Stipple
+        Loading Stipple. Press any key to skip the animation.
       </span>
     </>
   )

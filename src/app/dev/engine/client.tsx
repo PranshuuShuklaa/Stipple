@@ -107,8 +107,8 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
         {/* View Switcher Controls */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '8px', alignItems: 'flex-end' }}>
           <div
-            role="toolbar"
-            aria-label="Visualization Layouts"
+            role="group"
+            aria-label="Visualization layouts"
             style={{
               display: 'flex',
               gap: '8px',
@@ -145,7 +145,13 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-            <span style={{ fontSize: '13px', color: 'var(--dim)' }}>{statusMsg}</span>
+            <span
+              role="status"
+              aria-live="polite"
+              style={{ fontSize: '13px', color: 'var(--dim)' }}
+            >
+              {statusMsg}
+            </span>
             <button
               type="button"
               onClick={handleRapidTest}

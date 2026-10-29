@@ -48,6 +48,9 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: themeBeforePaint }} />
       </head>
       <body>
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <header className="site-header">
           <div className="shell">
             <Link className="wordmark" href="/">
@@ -56,7 +59,9 @@ export default function RootLayout({
             <ThemeToggle />
           </div>
         </header>
-        <main>{children}</main>
+        <main id="main-content" tabIndex={-1}>
+          {children}
+        </main>
       </body>
     </html>
   )

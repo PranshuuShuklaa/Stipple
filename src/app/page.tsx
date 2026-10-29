@@ -51,12 +51,10 @@ export default function HomePage() {
 
       <div className="home">
         <div className="shell">
-          <h1
-            ref={headlineRef}
-            className={`${styles.headline} type-display`}
-            style={introDone ? undefined : { opacity: 0 }}
-          >
-            Your repo, <br />one dot per file.
+          <h1 ref={headlineRef} className={`${styles.headline} type-display`}>
+            Your repo,{' '}
+            <br />
+            one dot per file.
           </h1>
           <p className={styles.sentence}>
             Paste a public GitHub repo, then scroll through its story: files,
