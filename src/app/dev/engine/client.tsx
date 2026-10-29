@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState } from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Scan } from '@/lib/types/scan'
 import { DotStage, type DotStageHandle } from '@/components/ui/dot-stage'
 import type { LayoutName } from '@/engine/renderer'
@@ -37,14 +37,40 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
   const [activeLayout, setActiveLayout] = useState<LayoutName>('files')
   const [showTable, setShowTable] = useState(false)
   const [statusMsg, setStatusMsg] = useState('Files layout active (240 dots)')
+  const statusTimerRef = useRef<number | null>(null)
+
+  useEffect(() => {
+    return () => {
+      if (statusTimerRef.current !== null) {
+        window.clearTimeout(statusTimerRef.current)
+      }
+    }
+  }, [])
 
   const handleSwitchLayout = (layout: LayoutName) => {
     setActiveLayout(layout)
     setStatusMsg(`Morphing to ${layout}...`)
     stageRef.current?.morphTo(layout)
-    setTimeout(() => {
+    if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current)
+    statusTimerRef.current = window.setTimeout(() => {
       setStatusMsg(`${layout.charAt(0).toUpperCase() + layout.slice(1)} layout active (240 dots)`)
+      statusTimerRef.current = null
     }, 1250)
+  }
+
+  const handleLayoutKeyDown = (event: KeyboardEvent<HTMLButtonElement>, index: number) => {
+    if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(event.key)) return
+    event.preventDefault()
+    const nextIndex =
+      event.key === 'Home'
+        ? 0
+        : event.key === 'End'
+          ? LAYOUTS.length - 1
+          : (index + (event.key === 'ArrowRight' ? 1 : -1) + LAYOUTS.length) % LAYOUTS.length
+    const next = LAYOUTS[nextIndex]
+    if (!next) return
+    handleSwitchLayout(next.id)
+    document.getElementById(`dev-layout-${next.id}`)?.focus()
   }
 
   // Rapid switching test to verify animation stability and zero glitches
@@ -123,9 +149,11 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
               return (
                 <button
                   key={item.id}
+                  id={`dev-layout-${item.id}`}
                   type="button"
                   aria-pressed={isActive}
                   onClick={() => handleSwitchLayout(item.id)}
+                  onKeyDown={(event) => handleLayoutKeyDown(event, LAYOUTS.indexOf(item))}
                   style={{
                     padding: '8px 18px',
                     borderRadius: '999px',
@@ -145,11 +173,15 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+<<<<<<< HEAD
             <span
               role="status"
               aria-live="polite"
               style={{ fontSize: '13px', color: 'var(--dim)' }}
             >
+=======
+            <span role="status" aria-live="polite" style={{ fontSize: '13px', color: 'var(--dim)' }}>
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
               {statusMsg}
             </span>
             <button
@@ -169,6 +201,8 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
             <button
               type="button"
               onClick={() => setShowTable((prev) => !prev)}
+              aria-expanded={showTable}
+              aria-controls="dev-engine-data-table"
               style={{
                 fontSize: '13px',
                 padding: '4px 12px',
@@ -234,6 +268,7 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
       {/* Visually Hidden (or Toggled) Data Table for Accessibility */}
       <div className={showTable ? undefined : 'visually-hidden'}>
         <div
+          id="dev-engine-data-table"
           style={{
             marginTop: '16px',
             padding: '20px',
@@ -251,11 +286,12 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Languages</h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <caption className="visually-hidden">Languages</caption>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    <th style={{ padding: '6px 0' }}>Language</th>
-                    <th style={{ padding: '6px 0' }}>Files</th>
-                    <th style={{ padding: '6px 0' }}>Share</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Language</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Files</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Share</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -274,11 +310,12 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Top Folders</h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <caption className="visually-hidden">Top folders</caption>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    <th style={{ padding: '6px 0' }}>Folder</th>
-                    <th style={{ padding: '6px 0' }}>Files</th>
-                    <th style={{ padding: '6px 0' }}>Share</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Folder</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Files</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Share</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -297,10 +334,11 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
             <div>
               <h3 style={{ fontSize: '15px', fontWeight: 600, marginBottom: '8px' }}>Weekly Activity</h3>
               <table style={{ width: '100%', borderCollapse: 'collapse', textAlign: 'left' }}>
+                <caption className="visually-hidden">Weekly activity</caption>
                 <thead>
                   <tr style={{ borderBottom: '1px solid var(--line)' }}>
-                    <th style={{ padding: '6px 0' }}>Week</th>
-                    <th style={{ padding: '6px 0' }}>Commits</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Week</th>
+                    <th scope="col" style={{ padding: '6px 0' }}>Commits</th>
                   </tr>
                 </thead>
                 <tbody>

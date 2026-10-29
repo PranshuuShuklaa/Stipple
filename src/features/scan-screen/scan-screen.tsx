@@ -40,6 +40,8 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   const [state, setState] = useState<ScanFlowState>(initialScanFlowState)
 
   const stageRef = useRef<DotStageHandle>(null)
+  const headingRef = useRef<HTMLHeadingElement>(null)
+  const previousPhaseRef = useRef(state.phase)
   const stateRef = useRef(state)
   const stageAtRef = useRef(0)
   const lastStagesRef = useRef(0)
@@ -54,6 +56,14 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   useEffect(() => {
     stateRef.current = state
   }, [state])
+
+  useEffect(() => {
+    const previous = previousPhaseRef.current
+    previousPhaseRef.current = state.phase
+    if (state.phase === 'error' || (previous === 'error' && state.phase === 'streaming')) {
+      headingRef.current?.focus()
+    }
+  }, [state.phase])
 
   const reducedMotion = useSyncExternalStore(
     subscribeReducedMotion,
@@ -290,8 +300,15 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
     const resetNote =
       code === 'rate_limited' && state.error?.resetAt ? rateLimitResetCopy(state.error.resetAt) : ''
     return (
+<<<<<<< HEAD
       <div className="shell" role="alert">
         <h1 className="type-section">{scanErrorTitle(code)}</h1>
+=======
+      <div className="shell">
+        <h1 ref={headingRef} tabIndex={-1} className="type-section">
+          {scanErrorTitle(code)}
+        </h1>
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
         <p className={styles.errorBody}>
           github.com/{owner}/{repo}: {message}
         </p>
@@ -314,7 +331,9 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
 
   return (
     <div className="shell">
-      <h1 className="type-section">Scanning {owner}/{repo}</h1>
+      <h1 ref={headingRef} tabIndex={-1} className="type-section">
+        Scanning {owner}/{repo}
+      </h1>
       <div
         className={`${styles.stageBox} ${revealing && reducedMotion ? styles.crossfade : ''}`}
         aria-busy={!revealing}
@@ -325,11 +344,15 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
           scan={placeholder}
           variant="scan"
           className={styles.stage}
+<<<<<<< HEAD
           ariaLabel={
             reducedMotion
               ? `Scanning ${owner}/${repo}: placeholder dots until the scan finishes`
               : `Scanning ${owner}/${repo}: a sweep line over gray dots`
           }
+=======
+          ariaLabel={`Scanning ${owner}/${repo}: a field of dots while the report is prepared`}
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
           onEngineReady={handleEngineReady}
         />
       </div>

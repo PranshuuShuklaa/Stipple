@@ -336,12 +336,17 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       const wm = document.createElement('div')
       wm.className = styles.wordmarkFade
       wm.setAttribute('aria-hidden', 'true')
+<<<<<<< HEAD
+=======
+      wm.setAttribute('data-intro-wordmark', '')
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       const txt = document.createElement('p')
       txt.className = styles.wordmark
       txt.textContent = 'stipple'
       wm.appendChild(txt)
       document.body.appendChild(wm)
 
+<<<<<<< HEAD
       // Whatever happens, this visit has now seen the intro
       sessionStorage.setItem(SESSION_KEY, '1')
 
@@ -360,13 +365,27 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
         for (const event of skipEvents) window.removeEventListener(event, finish)
       }
 
+=======
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       const fadeIn = animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
       const fadeOut = animate(txt, {
         opacity: [1, 0],
         duration: 150,
         ease: 'linear',
         delay: 150,
+<<<<<<< HEAD
         onComplete: finish,
+=======
+        onComplete: () => {
+          // Mark the visit complete only after the fade. In development
+          // Strict Mode React deliberately mounts, cleans up, and mounts
+          // effects again; marking it earlier would suppress the replayed
+          // fade entirely.
+          sessionStorage.setItem(SESSION_KEY, '1')
+          wm.remove()
+          onDone()
+        },
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       })
 
       for (const event of skipEvents) {
@@ -712,7 +731,12 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
 
   return (
     <>
-      <div ref={overlayRef} className={styles.overlay} aria-hidden="true">
+      <div
+        ref={overlayRef}
+        className={styles.overlay}
+        aria-hidden="true"
+        data-intro-overlay=""
+      >
         {/* Dark background div – faded out during handoff */}
         <div className={styles.overlayBg} />
         <canvas ref={canvasRef} className={styles.canvas} />
@@ -722,8 +746,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       </div>
       {/* Accessible status: outside the aria-hidden overlay, since hidden
           subtrees are not announced by screen readers */}
+<<<<<<< HEAD
       <span className={styles.srOnly} role="status">
         Loading Stipple. Press any key to skip the animation.
+=======
+      <span className={styles.srOnly} role="status" data-intro-status="">
+        Loading Stipple
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       </span>
     </>
   )

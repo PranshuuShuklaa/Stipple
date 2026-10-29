@@ -18,14 +18,17 @@
 
   --c1: #5B2BE0;      /* violet — language 1, primary accent */
   --c2: #E0246E;      /* pink — language 2 */
-  --c3: #C77700;      /* amber — language 3 */
-  --c4: #0B8F63;      /* green — language 4 */
+  --c3: #B56A00;      /* amber — language 3 */
+  --c4: #0A865D;      /* green — language 4 */
   --c5: #0A7FC2;      /* sky — language 5 / other */
 
   /* focus ring (DESIGN.md) */
   --focus-color: var(--c1);
   --focus-width: 2px;
   --focus-offset: 3px;
+
+  /* text on --c1 buttons: AA in both themes */
+  --on-accent: #FFFFFF;
 
   /* Intro constants (REFERENCE.md Decisions): the boot intro always shows
    * the dark panel and dark-theme dim text, in both themes. Declared once,
@@ -54,6 +57,8 @@
   --c3: #FFB33D;
   --c4: #3DDC97;
   --c5: #4CC9FF;
+
+  --on-accent: #100C24;
 }
 
 /* system dark, unless the user forced light */
@@ -72,5 +77,7 @@
     --c3: #FFB33D;
     --c4: #3DDC97;
     --c5: #4CC9FF;
+
+    --on-accent: #100C24;
   }
 }

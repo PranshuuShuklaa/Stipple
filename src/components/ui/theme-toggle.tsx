@@ -75,7 +75,13 @@ export function ThemeToggle() {
   }
 
   return (
-    <button type="button" className="theme-toggle" aria-label={label} onClick={toggle}>
+    <button
+      type="button"
+      className="theme-toggle"
+      aria-label={label}
+      onClick={toggle}
+      data-theme-toggle=""
+    >
       <svg className="icon-sun" viewBox="0 0 18 18" fill="none" aria-hidden="true">
         <circle cx="9" cy="9" r="3.5" stroke="currentColor" strokeWidth="1.5" />
         <path

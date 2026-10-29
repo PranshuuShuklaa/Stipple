@@ -26,8 +26,8 @@ const LIGHT_COLORS = {
   line: '#C9C1E3',
   c1: '#5B2BE0',
   c2: '#E0246E',
-  c3: '#C77700',
-  c4: '#0B8F63',
+  c3: '#B56A00',
+  c4: '#0A865D',
   c5: '#0A7FC2',
 } as const
 
@@ -161,13 +161,7 @@ export function buildCardSvg(spec: CardSpec): CardSvgResult {
   const validScore = spec.score !== null && Number.isFinite(spec.score) ? Math.max(0, Math.min(100, Math.round(spec.score))) : 0
   const ringOffset = ringCircumference * (1 - validScore / 100)
 
-  const colorMapLight: Record<string, string> = {
-    c1: LIGHT_COLORS.c1,
-    c2: LIGHT_COLORS.c2,
-    c3: LIGHT_COLORS.c3,
-    c4: LIGHT_COLORS.c4,
-    c5: LIGHT_COLORS.c5,
-  }
+  const dotColorClasses = new Set(['c1', 'c2', 'c3', 'c4', 'c5'])
 
   const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="${CARD_WIDTH}" height="${CARD_HEIGHT}" viewBox="0 0 ${CARD_WIDTH} ${CARD_HEIGHT}" role="img" aria-label="${escapeXmlText(titleText)}">
 <title>${escapeXmlText(titleText)}</title>
@@ -217,7 +211,7 @@ export function buildCardSvg(spec: CardSpec): CardSvgResult {
     }
     100% {
       transform: translate(0px, 0px) scale(1);
-      opacity: 0.9;
+      opacity: 1;
     }
   }
   @keyframes ringDraw {
@@ -276,8 +270,8 @@ export function buildCardSvg(spec: CardSpec): CardSvgResult {
       const dx = dot.startX - dot.x
       const dy = dot.startY - dot.y
       const delay = (i * 0.008).toFixed(3)
-      const colorVal = colorMapLight[dot.colorKey] || LIGHT_COLORS.c1
-      return `<circle cx="${dot.x}" cy="${dot.y}" r="${dot.d / 2}" fill="${colorVal}" class="dot" style="--dx: ${dx}px; --dy: ${dy}px; --delay: ${delay}s;" />`
+      const colorClass = dotColorClasses.has(dot.colorKey) ? dot.colorKey : 'c1'
+      return `<circle cx="${dot.x}" cy="${dot.y}" r="${dot.d / 2}" class="dot ${colorClass}" style="--dx: ${dx}px; --dy: ${dy}px; --delay: ${delay}s;" />`
     })
     .join('\n  ')}
 </g>

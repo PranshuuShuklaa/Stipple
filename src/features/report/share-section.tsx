@@ -113,8 +113,20 @@ export function ShareSection({ scan }: { scan: Scan }) {
     key: string,
     text: string,
     button: HTMLButtonElement,
+    label: string,
   ) => {
     const success = await copyToClipboard(text)
+<<<<<<< HEAD
+=======
+    if (!success) {
+      setCopyMessage('Copy failed. Select the text and copy it manually.')
+      return
+    }
+
+    setCopyMessage(`${label} copied.`)
+    copiedButtonRef.current = button
+    setCopiedKey(key)
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
     if (copyTimerRef.current !== null) {
       window.clearTimeout(copyTimerRef.current)
     }
@@ -146,9 +158,15 @@ export function ShareSection({ scan }: { scan: Scan }) {
   return (
     <section
       id="share"
+<<<<<<< HEAD
       aria-labelledby="share-heading"
       ref={sectionRef}
       className={styles.shareSection}
+=======
+      ref={sectionRef}
+      className={styles.shareSection}
+      aria-labelledby="share-heading"
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
     >
       <LinkForge
         ref={forgeRef}
@@ -182,6 +200,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <p className={styles.previewLabel}>Animated README card</p>
           <a href={reportUrl} target="_blank" rel="noopener noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
+<<<<<<< HEAD
             <img
               src={cardApiUrl}
               alt={`${scan.owner}/${scan.name} Stipple animated card: ${scan.files.length.toLocaleString('en-US')} files, health ${scan.health.score} out of 100`}
@@ -189,6 +208,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
               height="120"
               style={{ maxWidth: '100%', height: 'auto' }}
             />
+=======
+            <img src={cardApiUrl} alt={`${scan.owner}/${scan.name} Stipple animated card`} width="300" height="120" style={{ maxWidth: '100%', height: 'auto' }} />
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
             <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
@@ -201,7 +223,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
             <button
               type="button"
               className={styles.copyButton}
-              onClick={(event) => handleCopy('link', reportUrl, event.currentTarget)}
+              onClick={(event) => handleCopy('link', reportUrl, event.currentTarget, 'Report link')}
             >
               {copiedKey === 'link' ? 'Copied' : 'Copy link'}
             </button>
@@ -216,7 +238,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('badge', badgeMarkdown, event.currentTarget)
+                handleCopy('badge', badgeMarkdown, event.currentTarget, 'Badge Markdown')
               }
             >
               {copiedKey === 'badge' ? 'Copied' : 'Copy badge'}
@@ -232,7 +254,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('card', cardMarkdown, event.currentTarget)
+                handleCopy('card', cardMarkdown, event.currentTarget, 'Card Markdown')
               }
             >
               {copiedKey === 'card' ? 'Copied' : 'Copy card'}
@@ -248,7 +270,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
               type="button"
               className={styles.copyButton}
               onClick={(event) =>
-                handleCopy('summary', summaryBlock, event.currentTarget)
+                handleCopy('summary', summaryBlock, event.currentTarget, 'Summary block')
               }
             >
               {copiedKey === 'summary' ? 'Copied' : 'Copy summary'}
@@ -257,6 +279,9 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <pre className={styles.copyPre}><code>{summaryBlock}</code></pre>
         </div>
       </div>
+      <p className={styles.copyStatus} role="status" aria-live="polite">
+        {copyMessage}
+      </p>
     </section>
   )
 }

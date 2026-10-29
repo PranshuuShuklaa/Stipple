@@ -12,8 +12,16 @@ import styles from './report.module.css'
 export function ReportError({ owner, repo, error }: { owner: string; repo: string; error: DesignedErrorRecord }) {
   const resetNote = error.resetAt ? rateLimitResetCopy(error.resetAt) : ''
   return (
+<<<<<<< HEAD
     <section className={styles.errorWrap} aria-labelledby="report-error-title">
       <h1 id="report-error-title" className={`type-section ${styles.errorTitle}`}>
+=======
+    <section
+      className={styles.errorWrap}
+      aria-labelledby="report-error-heading"
+    >
+      <h1 id="report-error-heading" className={`type-section ${styles.errorTitle}`}>
+>>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
         {scanErrorTitle(error.code)}
       </h1>
       <p className={styles.errorBody}>
