@@ -267,14 +267,18 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     }
 
     const elements = container.querySelectorAll<HTMLElement>('[data-label-text]')
-    if (elements.length > 0) {
-      animate(elements, {
-        opacity: [0, 1],
-        translateY: [10, 0],
-        delay: stagger(90, { start: 800 }),
-        duration: 600,
-        ease: 'outQuad',
-      })
+    if (elements.length === 0) return
+
+    const animation = animate(elements, {
+      opacity: [0, 1],
+      translateY: [10, 0],
+      delay: stagger(90, { start: 800 }),
+      duration: 600,
+      ease: 'outQuad',
+    })
+
+    return () => {
+      animation.revert()
     }
   }, [folderLabels, labelMode])
 
@@ -430,11 +434,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
 
       {/* Legend bottom left */}
       {variant === 'full' && (
-<<<<<<< HEAD
         <div className={styles.legend} role="group" aria-label="Visualization legend">
-=======
-        <div className={styles.legend}>
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
           {currentLayout === 'files' && (
             <>
               <span>

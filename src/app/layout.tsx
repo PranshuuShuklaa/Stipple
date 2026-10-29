@@ -52,19 +52,13 @@ export default function RootLayout({
         </noscript>
       </head>
       <body>
-<<<<<<< HEAD
-        <a className="skip-link" href="#main-content">
-          Skip to content
-        </a>
-=======
         <Suspense fallback={null}>
           <RouteFocus />
         </Suspense>
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
+        <a className="skip-link" href="#main-content">
+          Skip to content
+        </a>
         <header className="site-header">
-          <a className="skip-link" href="#main-content">
-            Skip to content
-          </a>
           <div className="shell">
             <Link className="wordmark" href="/">
               stipple

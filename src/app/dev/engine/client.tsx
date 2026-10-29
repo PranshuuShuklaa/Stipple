@@ -173,15 +173,7 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
           </div>
 
           <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
-<<<<<<< HEAD
-            <span
-              role="status"
-              aria-live="polite"
-              style={{ fontSize: '13px', color: 'var(--dim)' }}
-            >
-=======
             <span role="status" aria-live="polite" style={{ fontSize: '13px', color: 'var(--dim)' }}>
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
               {statusMsg}
             </span>
             <button

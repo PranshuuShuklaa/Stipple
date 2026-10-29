@@ -110,15 +110,7 @@ export function HealthSection({ scan }: { scan: Scan }) {
   }, [visible, reducedMotion, finalOffset, score])
 
   return (
-<<<<<<< HEAD
     <section id="health" aria-labelledby="health-heading" ref={sectionRef}>
-=======
-    <section
-      id="health"
-      aria-labelledby="health-heading"
-      ref={sectionRef}
-    >
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       <RiseMask id="health-heading" className={`type-section ${styles.sectionHeadline}`}>
         Health: <span ref={scoreRef} className="tabular">{score}</span> out of 100
       </RiseMask>

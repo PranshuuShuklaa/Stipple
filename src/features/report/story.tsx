@@ -85,8 +85,10 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
     engine.prepareStory(steps.map((step) => step.layout))
 
     const proxies = steps.slice(1).map(() => ({ p: 0 }))
+    const frame = new Array<number>(proxies.length).fill(0)
     const applyFrame = () => {
-      engine.setStoryFrame(proxies.map((proxy) => proxy.p))
+      for (let i = 0; i < proxies.length; i++) frame[i] = proxies[i].p
+      engine.setStoryFrame(frame)
     }
 
     const timeline = createTimeline({ autoplay: false })

@@ -1,6 +1,6 @@
 'use client'
 
-import { useRef, useState, useCallback } from 'react'
+import { useRef, useState, useCallback, useMemo } from 'react'
 import { DotStage } from '@/components/ui/dot-stage'
 import { RepoForm } from '@/features/scan-form/repo-form'
 import { IntroOverlay } from '@/features/intro/intro-overlay'
@@ -9,7 +9,7 @@ import { createScanFixture } from '@/lib/demo/scan-fixture'
 import styles from './home.module.css'
 
 export default function HomePage() {
-  const demoScan = createScanFixture('stipple/stipple')
+  const demoScan = useMemo(() => createScanFixture('stipple/stipple'), [])
 
   const stageContainerRef = useRef<HTMLDivElement>(null)
   const engineRef = useRef<DotEngine | null>(null)
@@ -51,18 +51,9 @@ export default function HomePage() {
 
       <div className="home">
         <div className="shell">
-<<<<<<< HEAD
           <h1 ref={headlineRef} className={`${styles.headline} type-display`}>
-            Your repo,{' '}
-            <br />
+            Your repo, <br />
             one dot per file.
-=======
-          <h1
-            ref={headlineRef}
-            className={`${styles.headline} type-display`}
-          >
-            Your repo, <br />one dot per file.
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
           </h1>
           <p className={styles.sentence}>
             Paste a public GitHub repo, then scroll through its story: files,

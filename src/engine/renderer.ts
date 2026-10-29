@@ -204,6 +204,7 @@ export class DotEngine {
   private boundPointerCancel: () => void
   private boundKeyDown: (e: KeyboardEvent) => void
   private boundReducedMotionChange: (() => void) | null = null
+  private boundLoop: () => void
 
   // Spatial grid for O(1) hover queries
   private spatialGrid = new SpatialGrid(36)
@@ -254,6 +255,7 @@ export class DotEngine {
 
     // Setup observers and listeners
     this.boundVisibilityChange = this.handleVisibilityChange.bind(this)
+    this.boundLoop = this.loop.bind(this)
     this.boundPointerMove = this.handlePointerMove.bind(this)
     this.boundPointerLeave = this.handlePointerLeave.bind(this)
     this.boundPointerOut = this.handlePointerOut.bind(this)
@@ -572,7 +574,7 @@ export class DotEngine {
     if (shouldRun && !this.isRunning) {
       this.isRunning = true
       this.lastFrameAt = 0
-      this.rafId = requestAnimationFrame(this.loop.bind(this))
+      this.rafId = requestAnimationFrame(this.boundLoop)
     } else if (!shouldRun && this.isRunning) {
       this.isRunning = false
       this.lastFrameAt = 0
@@ -855,9 +857,12 @@ export class DotEngine {
   public setStoryFrame(frames: readonly number[]): void {
     if (this.isDestroyed || !this.storyMode || this.storyTargets.length < 2) return
     const segmentCount = this.storyTargets.length - 1
-    const next = new Array<number>(segmentCount)
-    for (let i = 0; i < segmentCount; i++) next[i] = clamp01(frames[i] ?? 0)
-    this.storyFrames = next
+    if (this.storyFrames.length !== segmentCount) {
+      this.storyFrames = new Array<number>(segmentCount).fill(0)
+    }
+    for (let i = 0; i < segmentCount; i++) {
+      this.storyFrames[i] = clamp01(frames[i] ?? 0)
+    }
 
     if (this.currentAnimation) {
       this.currentAnimation.pause()
@@ -1160,7 +1165,7 @@ export class DotEngine {
     }
 
     this.render(timestamp)
-    this.rafId = requestAnimationFrame(this.loop.bind(this))
+    this.rafId = requestAnimationFrame(this.boundLoop)
   }
 
   /**
@@ -1355,7 +1360,7 @@ export class DotEngine {
     }
 
     if (this.currentAnimation) {
-      this.currentAnimation.pause()
+      this.currentAnimation.revert()
       this.currentAnimation = null
     }
     this.crossFadeSnapshot = null

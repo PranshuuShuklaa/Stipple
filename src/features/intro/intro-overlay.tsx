@@ -100,38 +100,53 @@ function sample(
   maxPts: number,
   fontFamily: string
 ): { pts: [number, number, number][]; gap: number } {
-  const off = document.createElement('canvas')
-  off.width = W
-  off.height = H
-  const g = off.getContext('2d')!
+  const measure = document.createElement('canvas').getContext('2d')!
 
   // Size the word to 70% of width, max 50% of height
-  g.font = `600 100px ${fontFamily}`
-  const fs = computeWordFontSize(g.measureText(WORD).width, W, H)
-  g.font = `600 ${fs}px ${fontFamily}`
-  g.textBaseline = 'middle'
-  g.fillStyle = '#fff'
+  measure.font = `600 100px ${fontFamily}`
+  const fs = computeWordFontSize(measure.measureText(WORD).width, W, H)
+  measure.font = `600 ${fs}px ${fontFamily}`
 
-  const tw = g.measureText(WORD).width
+  const tw = measure.measureText(WORD).width
   const x0 = (W - tw) / 2
 
   // Cumulative widths per letter (to map x → letter index)
   const pre: number[] = []
   for (let i = 0; i < WORD.length; i++) {
-    pre.push(g.measureText(WORD.slice(0, i + 1)).width)
+    pre.push(measure.measureText(WORD.slice(0, i + 1)).width)
   }
 
-  g.fillText(WORD, x0, H / 2)
+  // Sample only the word's bounding box. Reading the full viewport back on a
+  // 2× canvas is a multi-megabyte getImageData call and a measurable long task.
+  const left = Math.max(0, Math.floor(x0 - 2))
+  const right = Math.min(W, Math.ceil(x0 + tw + 2))
+  const top = Math.max(0, Math.floor(H / 2 - fs * 0.8))
+  const bottom = Math.min(H, Math.ceil(H / 2 + fs * 0.8))
+  const sampleWidth = right - left
+  const sampleHeight = bottom - top
+  if (sampleWidth <= 0 || sampleHeight <= 0) {
+    return { pts: [], gap: computeGap(fs) }
+  }
 
-  const px = g.getImageData(0, 0, W, H).data
+  const off = document.createElement('canvas')
+  off.width = sampleWidth
+  off.height = sampleHeight
+  const g = off.getContext('2d')!
+  g.font = `600 ${fs}px ${fontFamily}`
+  g.textBaseline = 'middle'
+  g.fillStyle = '#fff'
+  g.fillText(WORD, x0 - left, H / 2 - top)
+
+  const px = g.getImageData(0, 0, sampleWidth, sampleHeight).data
   let gap = computeGap(fs)
   let pts: [number, number, number][]
 
   for (;;) {
     pts = []
-    for (let y = 0; y < H; y += gap) {
-      for (let x = 0; x < W; x += gap) {
-        if (px[(y * W + x) * 4 + 3] > 128) {
+    for (let y = Math.ceil(top / gap) * gap; y < bottom; y += gap) {
+      for (let x = Math.ceil(left / gap) * gap; x < right; x += gap) {
+        const alpha = px[((y - top) * sampleWidth + (x - left)) * 4 + 3]
+        if (alpha > 128) {
           const lIdx = pre.findIndex((w) => x - x0 < w)
           pts.push([x, y, lIdx < 0 ? 6 : lIdx])
         }
@@ -320,6 +335,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
   useEffect(() => {
     const canvas = canvasRef.current
     const overlay = overlayRef.current
+    const headline = headlineRef.current
     if (!canvas || !overlay) return
 
     // ── Session check ─────────────────────────────────────────────────────────
@@ -336,56 +352,38 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       const wm = document.createElement('div')
       wm.className = styles.wordmarkFade
       wm.setAttribute('aria-hidden', 'true')
-<<<<<<< HEAD
-=======
       wm.setAttribute('data-intro-wordmark', '')
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       const txt = document.createElement('p')
       txt.className = styles.wordmark
       txt.textContent = 'stipple'
       wm.appendChild(txt)
       document.body.appendChild(wm)
 
-<<<<<<< HEAD
-      // Whatever happens, this visit has now seen the intro
-      sessionStorage.setItem(SESSION_KEY, '1')
-
       let finished = false
-      const finish = () => {
+      const skipEvents = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const
+      function removeSkipListeners() {
+        for (const event of skipEvents) window.removeEventListener(event, finish)
+      }
+      function finish() {
         if (finished) return
         finished = true
         fadeIn.pause()
         fadeOut.pause()
         removeSkipListeners()
+        // Mark the visit complete only after the fade or skip. In development
+        // Strict Mode would otherwise suppress the replayed fade.
+        sessionStorage.setItem(SESSION_KEY, '1')
         wm.remove()
         onDone()
       }
-      const skipEvents = ['pointerdown', 'keydown', 'wheel', 'touchmove'] as const
-      const removeSkipListeners = () => {
-        for (const event of skipEvents) window.removeEventListener(event, finish)
-      }
 
-=======
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       const fadeIn = animate(txt, { opacity: [0, 1], duration: 150, ease: 'linear' })
       const fadeOut = animate(txt, {
         opacity: [1, 0],
         duration: 150,
         ease: 'linear',
         delay: 150,
-<<<<<<< HEAD
         onComplete: finish,
-=======
-        onComplete: () => {
-          // Mark the visit complete only after the fade. In development
-          // Strict Mode React deliberately mounts, cleans up, and mounts
-          // effects again; marking it earlier would suppress the replayed
-          // fade entirely.
-          sessionStorage.setItem(SESSION_KEY, '1')
-          wm.remove()
-          onDone()
-        },
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
       })
 
       for (const event of skipEvents) {
@@ -422,16 +420,20 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     setupCanvas()
 
     // ── Wait for font then sample ─────────────────────────────────────────────
-    let rafId: number
+    let rafId = 0
     let timeline: Timeline | null = null
     let dots: IntroDot[] = []
     const rings: Ring[] = []
     let isDone = false
+    let cancelled = false
+    let doneTimer: number | undefined
+    let fontTimer: number | undefined
 
     // The literal computed family list (next/font uses a generated name)
     const fontFamily = resolveCanvasFontFamily()
 
     function triggerShockwave(x: number, y: number, amp: number, maxR: number, dur: number) {
+      if (cancelled || isDone) return
       // The engine is the tier authority; re-read it live (its 60-frame
       // measurement usually completes during the intro's first half)
       if (getTier?.()?.name === 'low') return
@@ -450,12 +452,13 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     }
 
     function loop() {
+      if (cancelled || isDone) return
       drawFrame(ctx, W, H, dots, rings)
       rafId = requestAnimationFrame(loop)
     }
 
     function finish() {
-      if (isDone) return
+      if (isDone || cancelled) return
       isDone = true
       sessionStorage.setItem(SESSION_KEY, '1')
       if (skipRef.current) skipRef.current.classList.add(styles.skipHidden)
@@ -464,7 +467,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       // conditionally) and a manual .remove() breaks React's own unmount
       // with "removeChild: The node to be removed is not a child of this
       // node". onDone flips the parent state and React unmounts it cleanly.
-      setTimeout(() => {
+      doneTimer = window.setTimeout(() => {
         cancelAnimationFrame(rafId)
         onDone()
       }, 60)
@@ -474,7 +477,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     // handoff end state; the overlay background then fades out in 300 ms
     let skipRequested = false
     function skipToFinishedState() {
-      if (!timeline) return
+      if (cancelled || isDone || !timeline) return
       timeline.pause()
       // Force all dots to their final handoff state, then fade the bg quickly
       for (const d of dots) { d.h = 1 }
@@ -491,7 +494,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       }
     }
     function handleSkip() {
-      if (isDone) return
+      if (isDone || cancelled) return
       skipRequested = true
       // Detach every skip listener: one skip is one skip
       removeSkipListeners()
@@ -514,6 +517,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     }
 
     function buildTimelineAndDots() {
+      if (cancelled || isDone) return
       // Start RAF before timeline so the first frame paints immediately
       // (also restarts the loop after a resize replay)
       rafId = requestAnimationFrame(loop)
@@ -679,26 +683,34 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     // First start: install the skip listeners once, then build. A resize
     // replay reuses the still-attached listeners and rebuilds only.
     function startIntro() {
+      if (cancelled || isDone) return
       addSkipListeners()
       buildTimelineAndDots()
     }
 
-    // Wait for font (up to 1200 ms), then start
-    Promise.race([
-      document.fonts.load(`600 100px ${fontFamily}`),
-      new Promise<void>((r) => setTimeout(r, 1200)),
-    ])
+    // Wait for font (up to 1200 ms), then start. The timeout is cleared in
+    // cleanup so a route change cannot start an intro for an unmounted tree.
+    const fontWait = new Promise<void>((resolve) => {
+      fontTimer = window.setTimeout(resolve, 1200)
+    })
+    Promise.race([document.fonts.load(`600 100px ${fontFamily}`), fontWait])
       .catch(() => {})
-      .then(() => startIntro())
+      .then(() => {
+        if (fontTimer !== undefined) {
+          window.clearTimeout(fontTimer)
+          fontTimer = undefined
+        }
+        if (!cancelled) startIntro()
+      })
 
     // Resize: replay instantly like the prototype — cancel the current run,
     // re-measure the canvas, re-sample and rebuild, debounced 300 ms
     let resizeTimer: ReturnType<typeof setTimeout> | undefined
     function handleResize() {
-      if (isDone || !timeline) return
+      if (cancelled || isDone || !timeline) return
       window.clearTimeout(resizeTimer)
       resizeTimer = setTimeout(() => {
-        if (isDone) return
+        if (cancelled || isDone) return
         cancelAnimationFrame(rafId)
         rings.length = 0
         setupCanvas()
@@ -709,6 +721,7 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
 
     // Pause/resume when tab is hidden (REFERENCE.md)
     function handleVisibility() {
+      if (cancelled || isDone) return
       if (document.hidden) {
         cancelAnimationFrame(rafId)
         timeline?.pause()
@@ -720,9 +733,17 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
     document.addEventListener('visibilitychange', handleVisibility)
 
     return () => {
+      cancelled = true
       cancelAnimationFrame(rafId)
       window.clearTimeout(resizeTimer)
-      timeline?.pause()
+      window.clearTimeout(fontTimer)
+      window.clearTimeout(doneTimer)
+      timeline?.revert()
+      if (headline) {
+        headline.style.opacity = '1'
+        headline.style.transform = 'none'
+      }
+      rings.length = 0
       removeSkipListeners()
       window.removeEventListener('resize', handleResize)
       document.removeEventListener('visibilitychange', handleVisibility)
@@ -746,13 +767,8 @@ export function IntroOverlay({ stageRef, headlineRef, onDone, getTier, scan }: I
       </div>
       {/* Accessible status: outside the aria-hidden overlay, since hidden
           subtrees are not announced by screen readers */}
-<<<<<<< HEAD
-      <span className={styles.srOnly} role="status">
-        Loading Stipple. Press any key to skip the animation.
-=======
       <span className={styles.srOnly} role="status" data-intro-status="">
-        Loading Stipple
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
+        Loading Stipple. Press any key to skip the animation.
       </span>
     </>
   )

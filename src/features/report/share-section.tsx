@@ -1,6 +1,6 @@
 'use client'
 
-import { useState, useRef, useEffect } from 'react'
+import { Suspense, lazy, useState, useRef, useEffect } from 'react'
 import { animate } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
 import { RiseText } from './rise-text'
@@ -15,10 +15,17 @@ import {
   buildSummaryMarkdown,
   copyToClipboard,
 } from '@/features/share/markdown'
-import { scoreBand } from '@/features/share/badge-svg'
-import { LinkForge, type LinkForgeHandle } from '@/features/share/link-forge'
+import { buildBadgeSvg, scoreBand } from '@/features/share/badge-svg'
+import type { LinkForgeHandle } from '@/features/share/link-forge'
 import { useQualityTier } from './use-quality-tier'
 import styles from './report.module.css'
+
+const LinkForge = lazy(async () => {
+  const imported = await import('@/features/share/link-forge')
+  return { default: imported.LinkForge }
+})
+
+const BADGE_DISPLAY_WIDTH = 268
 
 /**
  * Share section: badge preview popping in, copy boxes for report link,
@@ -40,13 +47,6 @@ export function ShareSection({ scan }: { scan: Scan }) {
   const [copyMessage, setCopyMessage] = useState('')
   const [copyPulse, setCopyPulse] = useState(0)
   const [siteUrl] = useState(() => getSiteUrl())
-
-  const copyLabels: Record<string, string> = {
-    link: 'Report link',
-    badge: 'Badge Markdown',
-    card: 'Card Markdown',
-    summary: 'Summary block',
-  }
 
   const plainMotion = reducedMotion || quality === 'low'
   const motionEnabled = !plainMotion
@@ -104,6 +104,14 @@ export function ShareSection({ scan }: { scan: Scan }) {
   const badgeApiUrl = getBadgeApiUrl(scan.owner, scan.name, siteUrl)
   const cardApiUrl = getCardApiUrl(scan.owner, scan.name, siteUrl)
   const band = scoreBand(scan.health.score).name
+  const badgeSpec = buildBadgeSvg({
+    owner: scan.owner,
+    repo: scan.name,
+    score: scan.health.score,
+  })
+  const badgeDisplayHeight = Math.round(
+    (BADGE_DISPLAY_WIDTH * badgeSpec.height) / badgeSpec.width,
+  )
 
   const badgeMarkdown = buildBadgeMarkdown(scan.owner, scan.name, siteUrl)
   const cardMarkdown = buildCardMarkdown(scan.owner, scan.name, siteUrl)
@@ -116,17 +124,6 @@ export function ShareSection({ scan }: { scan: Scan }) {
     label: string,
   ) => {
     const success = await copyToClipboard(text)
-<<<<<<< HEAD
-=======
-    if (!success) {
-      setCopyMessage('Copy failed. Select the text and copy it manually.')
-      return
-    }
-
-    setCopyMessage(`${label} copied.`)
-    copiedButtonRef.current = button
-    setCopiedKey(key)
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
     if (copyTimerRef.current !== null) {
       window.clearTimeout(copyTimerRef.current)
     }
@@ -143,7 +140,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
 
     copiedButtonRef.current = button
     setCopiedKey(key)
-    setCopyMessage(`${copyLabels[key] ?? 'Text'} copied to the clipboard.`)
+    setCopyMessage(`${label} copied to the clipboard.`)
     copyTimerRef.current = window.setTimeout(() => {
       setCopiedKey((curr) => (curr === key ? null : curr))
       setCopyMessage('')
@@ -158,22 +155,20 @@ export function ShareSection({ scan }: { scan: Scan }) {
   return (
     <section
       id="share"
-<<<<<<< HEAD
       aria-labelledby="share-heading"
       ref={sectionRef}
       className={styles.shareSection}
-=======
-      ref={sectionRef}
-      className={styles.shareSection}
-      aria-labelledby="share-heading"
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
     >
-      <LinkForge
-        ref={forgeRef}
-        badgeRef={badgeImageRef}
-        active={visible && motionEnabled}
-        band={band}
-      />
+      {visible && motionEnabled && (
+        <Suspense fallback={null}>
+          <LinkForge
+            ref={forgeRef}
+            badgeRef={badgeImageRef}
+            active
+            band={band}
+          />
+        </Suspense>
+      )}
       <RiseText id="share-heading" text="Share." className={`type-section ${styles.sectionHeadline}`} />
       <p className={styles.sectionBody}>
         Embed this repo&apos;s live health badge and animated card in your README, or share the story link.
@@ -191,6 +186,8 @@ export function ShareSection({ scan }: { scan: Scan }) {
               ref={badgeImageRef}
               className={styles.badgeImage}
               src={badgeApiUrl}
+              width={BADGE_DISPLAY_WIDTH}
+              height={badgeDisplayHeight}
               alt={`${scan.owner}/${scan.name} Stipple health badge: ${scan.health.score} out of 100`}
             />
             <span className="visually-hidden"> (opens in a new tab)</span>
@@ -200,7 +197,6 @@ export function ShareSection({ scan }: { scan: Scan }) {
           <p className={styles.previewLabel}>Animated README card</p>
           <a href={reportUrl} target="_blank" rel="noopener noreferrer">
             {/* eslint-disable-next-line @next/next/no-img-element */}
-<<<<<<< HEAD
             <img
               src={cardApiUrl}
               alt={`${scan.owner}/${scan.name} Stipple animated card: ${scan.files.length.toLocaleString('en-US')} files, health ${scan.health.score} out of 100`}
@@ -208,9 +204,6 @@ export function ShareSection({ scan }: { scan: Scan }) {
               height="120"
               style={{ maxWidth: '100%', height: 'auto' }}
             />
-=======
-            <img src={cardApiUrl} alt={`${scan.owner}/${scan.name} Stipple animated card`} width="300" height="120" style={{ maxWidth: '100%', height: 'auto' }} />
->>>>>>> 02806be17734b91a2914c4c7297afda106178ddf
             <span className="visually-hidden"> (opens in a new tab)</span>
           </a>
         </div>
