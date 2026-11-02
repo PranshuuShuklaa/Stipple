@@ -11,9 +11,6 @@ reference/
 GEMINI.md
 .opencode/
 opencode.json
-PROGRESS.md
-reference/
-Stipple-notes/
 
 # Secrets and environment (API keys live here, never in git)
 .env
@@ -49,8 +46,10 @@ Thumbs.db
 .idea/
 .vscode/
 
-# Playwright
-/playwright-report/
-/blob-report/
-/playwright/.cache/
-/playwright/.auth/
+.playwright-cli/
+.playwright/
+.agents/
+.claude/
+skills-lock.json
+*.webm
+node_modules
