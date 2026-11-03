@@ -1,9 +1,28 @@
 .wrap {
-  padding-block: 48px 96px;
+  padding-block: clamp(56px, 9vh, 112px) 128px;
+}
+
+.shell {
+  position: relative;
+}
+
+.shell > h1 {
+  max-width: 16ch;
+  margin-bottom: 28px;
+}
+
+.errorShell {
+  padding-block: clamp(56px, 12vh, 144px) 160px;
+}
+
+.errorShell h1 {
+  max-width: 18ch;
+  margin-bottom: 18px;
 }
 
 .stageBox {
   min-height: 320px;
+  margin-inline: -1px;
 }
 
 .stage {
@@ -12,9 +31,11 @@
 
 .status {
   min-height: 1.5em;
-  margin: 16px 0 0;
+  max-width: 62ch;
+  margin: 20px 0 0;
   color: var(--dim);
-  font-size: 15px;
+  font-size: 16px;
+  line-height: 1.45;
 }
 
 .errorBody {
@@ -38,7 +59,7 @@
 }
 
 .retry {
-  padding: 10px 22px;
+  padding: 12px 22px;
   border: 0;
   border-radius: 999px;
   background: var(--c1);
@@ -53,6 +74,11 @@
   color: var(--fg);
   text-decoration: underline;
   text-underline-offset: 3px;
+  transition: color var(--dur-fast, 180ms) linear;
+}
+
+.alt:hover {
+  color: var(--c1);
 }
 
 /* Reduced-motion arrival: a quiet cross-fade of the field. */
@@ -70,11 +96,25 @@
 }
 
 @media (max-width: 640px) {
+  .wrap {
+    padding-block: 40px 96px;
+  }
+
+  .shell > h1 {
+    margin-bottom: 20px;
+  }
+
   .stageBox {
     min-height: unset;
   }
 
   .stage {
     --stage-h: 44vh;
+  }
+
+  .actions {
+    align-items: flex-start;
+    flex-direction: column;
+    gap: 14px;
   }
 }

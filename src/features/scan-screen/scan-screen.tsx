@@ -7,7 +7,14 @@ import { animate } from 'animejs'
 import { DotStage, type DotStageHandle } from '@/components/ui/dot-stage'
 import type { DotEngine } from '@/engine/renderer'
 import type { Scan } from '@/lib/types/scan'
-import { SCAN_FALLBACK_AFTER_MS, SCAN_MAX_WAIT_MS, SCAN_REVEAL_MS, type ScanStageEvent } from '@/lib/scan-stages'
+import {
+  SCAN_FALLBACK_AFTER_MS,
+  SCAN_MAX_WAIT_MS,
+  SCAN_PALETTE_REVEAL_MS,
+  SCAN_REVEAL_MS,
+  type ScanStageEvent,
+} from '@/lib/scan-stages'
+import { interpolatePalette, paletteForScan, paletteString } from '@/lib/language-palette'
 import {
   FALLBACK_FETCH_ERROR,
   MAX_WAIT_ERROR,
@@ -21,10 +28,11 @@ import {
   type ScanFlowEvent,
   type ScanFlowState,
 } from './scan-flow'
-import { rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
+import { errorMessageForRepo, rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
 import styles from './scan-screen.module.css'
 
 const PLACEHOLDER_DOT_COUNT = 240
+const PALETTE_STORAGE_PREFIX = 'stipple-scan-palette:'
 
 type SweepModeName = 'off' | 'waiting' | 'shimmer' | 'reveal'
 
@@ -32,6 +40,21 @@ function subscribeReducedMotion(onChange: () => void): () => void {
   const query = window.matchMedia('(prefers-reduced-motion: reduce)')
   query.addEventListener('change', onChange)
   return () => query.removeEventListener('change', onChange)
+}
+
+function paletteStorageKey(owner: string, repo: string): string {
+  return `${PALETTE_STORAGE_PREFIX}${owner}/${repo}`
+}
+
+function applyRootPalette(palette: readonly string[]): void {
+  const root = document.documentElement
+  palette.forEach((color, index) => {
+    root.style.setProperty(`--repo-c${index + 1}`, color)
+    root.style.setProperty(`--c${index + 1}`, color)
+  })
+  root.dataset.glowPalette = paletteString(palette.slice(0, 4))
+  root.style.setProperty('--acc', palette[0] ?? '')
+  window.dispatchEvent(new Event('stipple:palette-change'))
 }
 
 export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
@@ -49,6 +72,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   const sweepModeRef = useRef<SweepModeName>('waiting')
   const navigatedRef = useRef(false)
   const revealAnimRef = useRef<ReturnType<typeof animate> | null>(null)
+  const paletteAnimRef = useRef<ReturnType<typeof animate> | null>(null)
   const tickerRef = useRef<number | null>(null)
 
   // The steady creep reads the live state inside the rAF callback, so
@@ -180,6 +204,8 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
       }
       revealAnimRef.current?.revert()
       revealAnimRef.current = null
+      paletteAnimRef.current?.pause()
+      paletteAnimRef.current = null
     }
   }, [runId, owner, repo, process])
 
@@ -231,6 +257,41 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
     }
     engine.setScan(state.scan)
   }, [state.scan])
+
+  // Recolor the shared world only after the real scan is known. The final
+  // palette stays on the root while the report route is replacing this page.
+  useEffect(() => {
+    if (!state.scan) return
+    const root = document.documentElement
+    const media = window.matchMedia('(prefers-color-scheme: dark)')
+    const dark = root.dataset.theme === 'dark' || (root.dataset.theme !== 'light' && media.matches)
+    const target = paletteForScan(state.scan, dark)
+    const from = Array.from({ length: 5 }, (_, index) =>
+      getComputedStyle(root).getPropertyValue(`--c${index + 1}`).trim() || target[index]!,
+    )
+    const storageKey = paletteStorageKey(owner, repo)
+    sessionStorage.setItem(storageKey, paletteString(target))
+    paletteAnimRef.current?.pause()
+
+    if (reducedMotion) {
+      applyRootPalette(target)
+      return
+    }
+
+    const proxy = { progress: 0 }
+    const animation = animate(proxy, {
+      progress: 1,
+      duration: SCAN_PALETTE_REVEAL_MS,
+      ease: 'inOutQuad',
+      onUpdate: () => applyRootPalette(interpolatePalette(from, target, proxy.progress)),
+      onComplete: () => applyRootPalette(target),
+    })
+    paletteAnimRef.current = animation
+    return () => {
+      animation.pause()
+      paletteAnimRef.current = null
+    }
+  }, [state.scan, owner, repo, reducedMotion])
 
   // Sweep mode follows the phase; reduced motion gets neither line nor shimmer.
   useEffect(() => {
@@ -298,7 +359,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   // Navigate a beat after the scan is in; the cross-fade covers reduced motion.
   useEffect(() => {
     if (state.phase !== 'revealing') return
-    const delay = reducedMotion ? 300 : SCAN_REVEAL_MS + 120
+    const delay = reducedMotion ? 300 : Math.max(SCAN_REVEAL_MS + 120, SCAN_PALETTE_REVEAL_MS + 120)
     const timer = window.setTimeout(() => {
       process({ type: 'reveal-finished' })
     }, delay)
@@ -313,11 +374,11 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
 
   if (state.phase === 'error') {
     const code = state.error?.code ?? 'upstream'
-    const message = state.error?.message ?? 'The scan could not finish.'
+    const message = errorMessageForRepo(owner, repo, state.error?.message ?? 'The scan could not finish.')
     const resetNote =
       code === 'rate_limited' && state.error?.resetAt ? rateLimitResetCopy(state.error.resetAt) : ''
     return (
-      <div className="shell">
+      <div className={`shell ${styles.errorShell}`} data-q data-quiet-zone>
         <h1 ref={headingRef} tabIndex={-1} className="type-section">
           {scanErrorTitle(code)}
         </h1>
@@ -342,7 +403,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   const revealing = state.phase === 'revealing'
 
   return (
-    <div className="shell" data-q>
+    <div className={`shell ${styles.shell}`} data-q>
       <h1 ref={headingRef} tabIndex={-1} className="type-section">
         Scanning {owner}/{repo}
       </h1>

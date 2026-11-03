@@ -33,6 +33,9 @@ export const SCAN_MAX_WAIT_MS = 15000
 /** A cached scan's color reveal finishes in about this long. */
 export const SCAN_REVEAL_MS = 900
 
+/** The approved redesign recolors the world before the report opens. */
+export const SCAN_PALETTE_REVEAL_MS = 1800
+
 /**
  * Where the sweep line sits when a stage completes, by the number of
  * completed stages (0 = none yet). Index n is the floor for n completed

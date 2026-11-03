@@ -1,6 +1,6 @@
 import Link from 'next/link'
 import type { DesignedErrorRecord } from '@/server/cache'
-import { rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
+import { errorMessageForRepo, rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
 import styles from './report.module.css'
 
 /**
@@ -15,12 +15,14 @@ export function ReportError({ owner, repo, error }: { owner: string; repo: strin
     <section
       className={styles.errorWrap}
       aria-labelledby="report-error-heading"
+      data-q
+      data-quiet-zone
     >
       <h1 id="report-error-heading" className={`type-section ${styles.errorTitle}`}>
         {scanErrorTitle(error.code)}
       </h1>
       <p className={styles.errorBody}>
-        github.com/{owner}/{repo}: {error.message}
+        github.com/{owner}/{repo}: {errorMessageForRepo(owner, repo, error.message)}
       </p>
       {resetNote !== '' && <p className={styles.errorNote}>{resetNote}</p>}
       <div className={styles.errorActions}>

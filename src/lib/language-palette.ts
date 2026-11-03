@@ -42,6 +42,19 @@ function mixWithBackground(color: string, background: string, amount: number): s
   return toHex(source.map((value, index) => Math.round(value + (target[index] - value) * amount)) as [number, number, number])
 }
 
+function parsePaletteColor(value: string): [number, number, number] {
+  const raw = value.replace('#', '')
+  return [
+    Number.parseInt(raw.slice(0, 2), 16),
+    Number.parseInt(raw.slice(2, 4), 16),
+    Number.parseInt(raw.slice(4, 6), 16),
+  ]
+}
+
+function paletteColorToHex([r, g, b]: [number, number, number]): string {
+  return toHex([r, g, b])
+}
+
 export function fixedLanguageColor(language: string | null | undefined, dark = true): string {
   const base = LANGUAGE_COLORS[(language ?? 'Other').trim().toLowerCase()] ?? '#A89FCF'
   return dark ? base : mixWithBackground(base, LIGHT_BACKGROUND, 0.32)
@@ -56,6 +69,18 @@ export function paletteForScan(scan: Scan, dark = true): string[] {
 
 export function paletteString(colors: readonly string[]): string {
   return colors.join('|')
+}
+
+export function interpolatePalette(from: readonly string[], to: readonly string[], progress: number): string[] {
+  const amount = Math.min(1, Math.max(0, progress))
+  return to.map((target, index) => {
+    const source = from[index] ?? target
+    const sourceRgb = parsePaletteColor(source)
+    const targetRgb = parsePaletteColor(target)
+    return paletteColorToHex(sourceRgb.map((value, channel) =>
+      Math.round(value + (targetRgb[channel] - value) * amount),
+    ) as [number, number, number])
+  })
 }
 
 export const DEFAULT_LANGUAGE_PALETTE = FALLBACK_COLORS

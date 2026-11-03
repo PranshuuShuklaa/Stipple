@@ -35,6 +35,11 @@ export function scanErrorRetries(code: string): boolean {
   return DESIGNS[code]?.retry ?? true
 }
 
+export function errorMessageForRepo(owner: string, repo: string, message: string): string {
+  const prefix = `github.com/${owner}/${repo}: `
+  return message.startsWith(prefix) ? message.slice(prefix.length) : message
+}
+
 /**
  * "The limit resets at 14:03 UTC (in 23 minutes)." for a future reset
  * that the UI shows next to the message. Returns '' when the ISO time

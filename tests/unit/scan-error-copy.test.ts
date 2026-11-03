@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
+import { errorMessageForRepo, rateLimitResetCopy, scanErrorRetries, scanErrorTitle } from '@/lib/scan-error-copy'
 
 const NOW = new Date('2026-10-24T12:00:00Z')
 
@@ -20,6 +20,13 @@ describe('scanErrorTitle', () => {
       // DESIGN copy rules: no marketing filler, no apologies.
       expect(title.toLowerCase()).not.toMatch(/sorry|oops|unleash|supercharge|seamless/)
     }
+  })
+
+  describe('errorMessageForRepo', () => {
+    it('does not repeat an address already included by the server', () => {
+      expect(errorMessageForRepo('nobody-xyz', 'missing', 'github.com/nobody-xyz/missing: not found')).toBe('not found')
+      expect(errorMessageForRepo('nobody-xyz', 'missing', 'not found')).toBe('not found')
+    })
   })
 
   it('keeps unknown codes working with the generic title', () => {
