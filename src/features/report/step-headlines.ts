@@ -160,6 +160,36 @@ export function activityBody(scan: Scan): string {
   return `${formatCount(peak.commits)} commits landed that week. Brighter means newer.`
 }
 
+export function pulseHeadline(scan: Scan): string {
+  const pulse = scan.pulse
+  if (!pulse || !pulse.lastCommit) return 'No activity data yet.'
+  const age = Math.max(0, Math.floor((Date.now() - Date.parse(`${pulse.lastCommit}T00:00:00Z`)) / 86_400_000))
+  if (pulse.status === 'active') return `Active: last commit ${age} day${age === 1 ? '' : 's'} ago.`
+  if (pulse.status === 'quiet') return `Quiet: last commit ${Math.max(1, Math.round(age / 30))} months ago.`
+  return 'Dormant: no commits in over a year.'
+}
+
+export function pulseBody(scan: Scan): string {
+  const pulse = scan.pulse
+  if (!pulse) return 'No activity data yet.'
+  const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
+  return `Commits in ${pulse.activeWeeks} of 52 weeks. Busiest day: ${names[pulse.busiestWeekday]}. Longest streak: ${pulse.longestStreakWeeks} weeks.`
+}
+
+export function structureHeadline(scan: Scan): string {
+  const structure = scan.structure
+  if (!structure) return 'Structure data is missing.'
+  const source = structure.codeSplit.source
+  const total = Object.values(structure.codeSplit).reduce((sum, value) => sum + value, 0)
+  return `${total ? Math.round((source / total) * 100) : 0}% source.`
+}
+
+export function structureBody(scan: Scan): string {
+  const structure = scan.structure
+  if (!structure) return 'The file tree has not been classified.'
+  return `${structure.topFolders} top-level folders. Deepest folder is ${structure.maxDepth} levels down.`
+}
+
 /* --- Folders step --- */
 
 /**
@@ -210,7 +240,7 @@ export function buildReportSteps(scan: Scan): ReportStep[] {
   return [
     { layout: 'files', headline: filesHeadline(scan), body: filesBody(scan) },
     { layout: 'languages', headline: languagesHeadline(scan), body: languagesBody(scan) },
-    { layout: 'activity', headline: activityHeadline(scan), body: activityBody(scan) },
-    { layout: 'folders', headline: foldersHeadline(scan), body: foldersBody(scan) },
+    { layout: 'pulse', headline: pulseHeadline(scan), body: pulseBody(scan) },
+    { layout: 'structure', headline: structureHeadline(scan), body: structureBody(scan) },
   ]
 }

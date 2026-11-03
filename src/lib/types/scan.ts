@@ -37,6 +37,37 @@ export interface ScanFlags {
   statsPending: boolean
 }
 
+export interface ScanPulseDay {
+  date: string
+  commits: number
+}
+
+export interface ScanPulse {
+  days: ScanPulseDay[]
+  lastCommit: string | null
+  activeWeeks: number
+  longestStreakWeeks: number
+  busiestWeekday: number
+  totalCommits: number
+  topWeeksShare: number
+  status: 'active' | 'quiet' | 'dormant'
+  pattern: 'steady' | 'bursty' | 'occasional'
+}
+
+export interface ScanStructure {
+  codeSplit: {
+    source: number
+    tests: number
+    docs: number
+    config: number
+    assets: number
+    other: number
+  }
+  largest: { path: string; size: number }[]
+  maxDepth: number
+  topFolders: number
+}
+
 export interface Scan {
   owner: string
   name: string
@@ -54,5 +85,7 @@ export interface Scan {
   health: ScanHealth
   dependencies: string[]
   flags: ScanFlags
+  pulse?: ScanPulse
+  structure?: ScanStructure
   scannedAt: string
 }

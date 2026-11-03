@@ -7,6 +7,8 @@ import { NumbersSection } from '@/features/report/numbers-section'
 import { DependenciesSection } from '@/features/report/dependencies-section'
 import { ShareSection } from '@/features/report/share-section'
 import { ScanPaletteBridge } from '@/components/ui/scan-palette-bridge'
+import { PulseView } from './pulse-view'
+import { StructureView } from './structure-view'
 import reportStyles from '@/features/report/report.module.css'
 import styles from '@/app/r/[owner]/[repo]/page.module.css'
 
@@ -34,6 +36,8 @@ export function ReportView({ scan }: { scan: Scan }) {
       </header>
 
       <Story scan={scan} />
+      <PulseView scan={scan} />
+      <StructureView scan={scan} />
       <StageDataTable scan={scan} />
 
       <div className={`${reportStyles.sections} t`} data-q>

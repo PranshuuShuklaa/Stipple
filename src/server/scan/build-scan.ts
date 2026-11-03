@@ -38,6 +38,8 @@ import {
   MANIFEST_FILES,
   parseDependencies,
 } from './normalizers'
+import { pulseFromRaw } from './pulse'
+import { structureFromFiles } from './structure'
 
 /**
  * Orchestrates one scan: repo metadata first (it names the default
@@ -223,6 +225,8 @@ export async function buildScan(owner: string, repo: string, options: BuildScanO
     health,
     dependencies,
     flags: { truncated: tree.truncated, statsPending },
+    pulse: pulseFromRaw(activityWeeks, repoData.pushed_at, now),
+    structure: structureFromFiles(files),
     scannedAt: now.toISOString(),
   }
 }

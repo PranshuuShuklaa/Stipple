@@ -375,7 +375,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       <div
         ref={labelsRef}
         className={styles.labels}
-        inert={currentLayout !== 'folders'}
+        inert={currentLayout !== 'folders' && currentLayout !== 'structure'}
       >
         {folderLabels?.map((l, slot) => (
           <div
@@ -471,10 +471,18 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
               <span className={styles.legendItem}>No language data for this repo.</span>
             ))}
 
-          {currentLayout === 'activity' && (
+          {(currentLayout === 'activity' || currentLayout === 'pulse') && (
             <span className={styles.legendItem}>
               <i className={styles.swatch} style={{ background: 'var(--c1)' }} />
-              Commits per week. Left is 16 weeks ago, right is this week. Brighter is newer.
+              {currentLayout === 'pulse'
+                ? 'Daily commits. Left is oldest, right is newest. Brighter is more active.'
+                : 'Commits per week. Left is 16 weeks ago, right is this week. Brighter is newer.'}
+            </span>
+          )}
+
+          {currentLayout === 'structure' && (
+            <span className={styles.legendItem}>
+              Folder clusters. Each label names a folder and its file count.
             </span>
           )}
         </div>

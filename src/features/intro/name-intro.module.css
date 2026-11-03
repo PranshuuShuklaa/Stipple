@@ -27,3 +27,28 @@
     display: none;
   }
 }
+.reducedWordmark {
+  position: fixed;
+  inset: 0;
+  z-index: 20;
+  display: grid;
+  place-items: center;
+  pointer-events: none;
+  color: var(--fg);
+  font-family: var(--font-display);
+  font-size: clamp(56px, 18vw, 180px);
+  font-weight: 700;
+  letter-spacing: -0.05em;
+  opacity: 0;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .reducedWordmark {
+    animation: reduced-wordmark-fade 300ms ease-out both;
+  }
+}
+
+@keyframes reduced-wordmark-fade {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}

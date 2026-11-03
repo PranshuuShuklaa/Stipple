@@ -29,6 +29,8 @@
 
   /* text on --c1 buttons: AA in both themes */
   --on-accent: #FFFFFF;
+  --button-bg: #1A1533;
+  --button-fg: #FFFFFF;
   --grain-opacity: 0.07;
 
   --font-display: 'Bricolage Grotesque', system-ui, sans-serif;
@@ -63,6 +65,8 @@
   --c5: #4CC9FF;
 
   --on-accent: #100C24;
+  --button-bg: #F4F1FF;
+  --button-fg: #100C24;
   --grain-opacity: 0.11;
 }
 
@@ -84,6 +88,8 @@
     --c5: #4CC9FF;
 
     --on-accent: #100C24;
+    --button-bg: #F1EEFF;
+    --button-fg: #100C24;
     --grain-opacity: 0.11;
   }
 }

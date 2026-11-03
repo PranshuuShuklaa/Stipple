@@ -281,18 +281,7 @@ export default function GlowBackground() {
   return (
     <>
       <canvas ref={canvasRef} aria-hidden="true" className="glow-background" />
-      <div aria-hidden="true" className="grain" style={{
-        position: 'fixed',
-        inset: '-50%',
-        zIndex: 1,
-        pointerEvents: 'none',
-        width: '200%',
-        height: '200%',
-        opacity: typeof document !== 'undefined' && document.documentElement.getAttribute('data-theme') === 'dark' ? '0.11' : '0.07',
-        mixBlendMode: 'overlay',
-        backgroundImage: 'url("data:image/svg+xml,%3Csvg xmlns=\'http://www.w3.org/2000/svg\' width=\'160\' height=\'160\'%3E%3Cfilter id=\'n\'%3E%3CfeTurbulence type=\'fractalNoise\' baseFrequency=\'.8\' numOctaves=\'2\' stitchTiles=\'stitch\'/%3E%3C/filter%3E%3Crect width=\'100%25\' height=\'100%25\' filter=\'url(%23n)\'/%3E%3C/svg%3E")',
-        animation: 'grain-step .9s steps(1) infinite',
-      }} />
+      <div aria-hidden="true" className="grain" />
     </>
   )
 }

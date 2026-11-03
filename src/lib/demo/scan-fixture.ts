@@ -157,6 +157,10 @@ export function createScanFixture(seedOrRepo: number | string = 'stipple/stipple
   const repoParts = typeof seedOrRepo === 'string' ? seedOrRepo.split('/') : ['stipple', 'stipple']
   const owner = repoParts[0] || 'stipple'
   const name = repoParts[1] || 'stipple'
+  const pulseDays = Array.from({ length: 364 }, (_, index) => {
+    const date = new Date(baseDate.getTime() - (363 - index) * 24 * 60 * 60 * 1000)
+    return { date: date.toISOString().slice(0, 10), commits: Math.floor(rng() * 8) }
+  })
 
   return {
     owner,
@@ -178,6 +182,23 @@ export function createScanFixture(seedOrRepo: number | string = 'stipple/stipple
     flags: {
       truncated: false,
       statsPending: false,
+    },
+    pulse: {
+      days: pulseDays,
+      lastCommit: pulseDays.at(-1)?.date ?? null,
+      activeWeeks: 31,
+      longestStreakWeeks: 9,
+      busiestWeekday: 4,
+      totalCommits,
+      topWeeksShare: 0.34,
+      status: 'active',
+      pattern: 'steady',
+    },
+    structure: {
+      codeSplit: { source: 145, tests: 38, docs: 18, config: 12, assets: 20, other: 7 },
+      largest: files.slice().sort((a, b) => b.size - a.size).slice(0, 5).map((file) => ({ path: file.path, size: file.size })),
+      maxDepth: 4,
+      topFolders: 5,
     },
     scannedAt: new Date('2026-10-23T00:00:00Z').toISOString(),
   }

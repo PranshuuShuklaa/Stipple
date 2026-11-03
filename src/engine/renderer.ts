@@ -12,6 +12,8 @@ import { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewpor
 import { calculateLanguagesLayout } from './layouts/languages'
 import { calculateActivityLayout } from './layouts/activity'
 import { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
+import { calculatePulseLayout } from './layouts/pulse'
+import { calculateStructureLayout } from './layouts/structure'
 import { resolveThemeColors } from './colors'
 import { SpatialGrid } from './spatial-grid'
 import {
@@ -35,7 +37,7 @@ import {
   isTypingTarget,
 } from './effects/konami'
 
-export type LayoutName = 'files' | 'languages' | 'activity' | 'folders'
+export type LayoutName = 'files' | 'languages' | 'pulse' | 'structure' | 'activity' | 'folders'
 
 export interface MorphOptions {
   origin?: 'center' | 'first' | 'last' | [number, number]
@@ -618,7 +620,7 @@ export class DotEngine {
 
     this.adoptLayoutGeometry(target)
 
-    if (this.currentLayout === 'folders' && 'labels' in target) {
+    if ((this.currentLayout === 'folders' || this.currentLayout === 'structure') && 'labels' in target) {
       this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
     }
 
@@ -635,6 +637,10 @@ export class DotEngine {
         return calculateActivityLayout(this.scan, viewport, this.theme)
       case 'folders':
         return calculateFoldersLayout(this.scan, viewport, this.theme)
+      case 'pulse':
+        return calculatePulseLayout(this.scan, viewport, this.theme)
+      case 'structure':
+        return calculateStructureLayout(this.scan, viewport, this.theme)
       case 'files':
       default:
         return calculateFilesLayout(this.scan, viewport, this.theme)
@@ -743,7 +749,7 @@ export class DotEngine {
     this.onLayoutChange?.(layout)
 
     const target = this.getLayoutTarget(layout)
-    if (layout === 'folders') {
+    if (layout === 'folders' || layout === 'structure') {
       this.adoptLayoutGeometry(target)
     } else {
       this.leaveClusters()
@@ -904,7 +910,7 @@ export class DotEngine {
     const snapshot = this.captureSnapshot()
     this.clearCrossFade()
     const target = this.getLayoutTarget(layout)
-    if (layout === 'folders') {
+    if (layout === 'folders' || layout === 'structure') {
       this.adoptLayoutGeometry(target)
     } else {
       this.leaveClusters()
@@ -969,7 +975,7 @@ export class DotEngine {
     this.storyDelays = this.storyTargets.slice(1).map((target) =>
       computeStoryDelays(this.dotCount, target.cols, target.rows)
     )
-    const folderIndex = this.storyLayouts.indexOf('folders')
+    const folderIndex = Math.max(this.storyLayouts.indexOf('folders'), this.storyLayouts.indexOf('structure'))
     if (folderIndex !== -1) {
       this.adoptLayoutGeometry(this.storyTargets[folderIndex])
     } else {
@@ -1008,9 +1014,9 @@ export class DotEngine {
     const layout = this.storyLayouts[state.layoutIndex]
     const target = this.storyTargets[state.layoutIndex]
 
-    if (layout && layout !== 'folders') {
+    if (layout && layout !== 'folders' && layout !== 'structure') {
       this.leaveClusters()
-    } else if (layout === 'folders' && target && this.folderClusterOf === null) {
+    } else if ((layout === 'folders' || layout === 'structure') && target && this.folderClusterOf === null) {
       this.adoptLayoutGeometry(target)
     }
 
@@ -1019,7 +1025,7 @@ export class DotEngine {
       this.onLayoutChange?.(layout)
     }
 
-    const hasLabels = layout === 'folders' && target !== undefined && 'labels' in target
+    const hasLabels = (layout === 'folders' || layout === 'structure') && target !== undefined && 'labels' in target
     if (indexChanged) {
       if (hasLabels) {
         this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
@@ -1034,7 +1040,7 @@ export class DotEngine {
   }
 
   private setLayoutLabels(layout: LayoutName, target: LayoutTarget): void {
-    if (layout === 'folders' && 'labels' in target) {
+    if ((layout === 'folders' || layout === 'structure') && 'labels' in target) {
       this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
     } else {
       this.onLabelsChange?.(null)
@@ -1257,7 +1263,7 @@ export class DotEngine {
     const sweepHolds = this.sweep.holdsColors()
     const sweepShimmer = sweepHolds && this.sweep.isShimmering()
     const clusterOf =
-      this.currentLayout === 'folders' && this.folderClusterOf?.length === n
+      (this.currentLayout === 'folders' || this.currentLayout === 'structure') && this.folderClusterOf?.length === n
         ? this.folderClusterOf
         : null
     const clustersActive = clusterOf !== null && this.clusterDrag.hasOffsets()

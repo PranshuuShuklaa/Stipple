@@ -256,7 +256,14 @@ export function NameIntro({ onDone }: NameIntroProps) {
     }
   }, [onDone])
 
-  return <div ref={ringRef} className={styles.ring} aria-hidden="true" />
+  return (
+    <>
+      <div className={styles.reducedWordmark} data-intro-wordmark aria-hidden="true">
+        {WORD}
+      </div>
+      <div ref={ringRef} className={styles.ring} aria-hidden="true" />
+    </>
+  )
 }
 
 export { WORD }

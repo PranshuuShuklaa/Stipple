@@ -88,6 +88,96 @@
   padding-bottom: 140px;
 }
 
+.featureSection {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.5fr);
+  gap: 48px;
+  padding: 120px 0;
+  border-top: 1px solid var(--line);
+}
+
+.featureNote {
+  color: var(--fg);
+  font-size: 15px;
+  margin: 0;
+}
+
+.pulseCalendar {
+  position: relative;
+  display: flex;
+  gap: 4px;
+  min-height: 150px;
+  align-items: center;
+  padding: 20px;
+  background: var(--panel);
+  border-radius: 24px;
+  overflow: auto;
+}
+
+.pulseWeek {
+  display: grid;
+  gap: 4px;
+  flex: 0 0 9px;
+}
+
+.pulseDot {
+  width: 9px;
+  height: 9px;
+  padding: 0;
+  border: 0;
+  border-radius: 50%;
+  background: var(--c1);
+  opacity: 0.15;
+  cursor: pointer;
+}
+
+.pulseDot[data-level="1"] { opacity: 0.45; }
+.pulseDot[data-level="2"] { opacity: 0.65; }
+.pulseDot[data-level="3"] { opacity: 0.85; }
+.pulseDot[data-level="4"] { opacity: 1; }
+.pulseDot:hover, .pulseDot:focus-visible { outline: 2px solid var(--fg); outline-offset: 3px; }
+
+.pulseTooltip {
+  position: absolute;
+  right: 16px;
+  bottom: 12px;
+  margin: 0;
+  padding: 6px 10px;
+  background: var(--bg);
+  color: var(--fg);
+  font-size: 13px;
+}
+
+.structureGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.2fr;
+  gap: 32px;
+}
+
+.featureSubhead {
+  margin: 0 0 16px;
+  font-size: 18px;
+  color: var(--fg);
+}
+
+.splitList, .biggestFiles {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.splitList li, .biggestFiles li {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 10px 0;
+  border-bottom: 1px solid var(--line);
+  color: var(--dim);
+}
+
+.splitList strong, .biggestFiles strong { color: var(--fg); font-variant-numeric: tabular-nums; }
+.biggestFiles span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
 .sections > section {
   border-top: 1px solid var(--line);
   padding-top: 56px;
@@ -287,6 +377,12 @@
 }
 
 @media (max-width: 640px) {
+  .featureSection, .structureGrid {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding: 80px 0;
+  }
+
   .errorWrap {
     padding-block: 64px 112px;
   }

@@ -16,6 +16,8 @@ import {
   formatCount,
   languagesBody,
   languagesHeadline,
+  pulseHeadline,
+  structureHeadline,
   topLanguage,
 } from '@/features/report/step-headlines'
 
@@ -250,7 +252,7 @@ describe('buildReportSteps', () => {
   it('orders the four story steps by layout', () => {
     const scan = createScanFixture('stipple/stipple')
     const steps = buildReportSteps(scan)
-    expect(steps.map((step) => step.layout)).toEqual(['files', 'languages', 'activity', 'folders'])
+    expect(steps.map((step) => step.layout)).toEqual(['files', 'languages', 'pulse', 'structure'])
   })
 
   it('stays consistent with each pure helper on a fixture scan', () => {
@@ -258,8 +260,8 @@ describe('buildReportSteps', () => {
     const [files, languages, activity, folders] = buildReportSteps(scan)
     expect(files?.headline).toBe(filesHeadline(scan))
     expect(languages?.headline).toBe(languagesHeadline(scan))
-    expect(activity?.headline).toBe(activityHeadline(scan))
-    expect(folders?.headline).toBe(foldersHeadline(scan))
+    expect(activity?.headline).toBe(pulseHeadline(scan))
+    expect(folders?.headline).toBe(structureHeadline(scan))
     expect(files?.headline).toBe('240 files.')
   })
 
