@@ -45,6 +45,7 @@ export function NameIntro({ onDone }: NameIntroProps) {
     const letters = Array.from(
       wordmark.querySelectorAll<HTMLElement>('.wordmark-letter')
     )
+    const headlineLetters = Array.from(document.querySelectorAll<HTMLElement>('.headline-letter'))
     const mark = wordmark.querySelector<HTMLElement>('.wordmark-mark')
     const nav = document.querySelector<HTMLElement>('.theme-toggle')
     const animations: JSAnimation[] = []
@@ -53,7 +54,7 @@ export function NameIntro({ onDone }: NameIntroProps) {
     let skipHandler: ((event: Event) => void) | null = null
     const pointerMove = (event: PointerEvent) => {
       if (isReducedMotion()) return
-      document.querySelectorAll<HTMLElement>('.headline-letter').forEach((letter) => {
+      headlineLetters.forEach((letter) => {
         const rect = letter.getBoundingClientRect()
         const dx = rect.left + rect.width / 2 - event.clientX
         const dy = rect.top + rect.height / 2 - event.clientY
@@ -201,7 +202,6 @@ export function NameIntro({ onDone }: NameIntroProps) {
         )
       }
 
-      const headlineLetters = document.querySelectorAll<HTMLElement>('.headline-letter')
       if (headlineLetters.length > 0) {
         animations.push(
           animate(headlineLetters, {

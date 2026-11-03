@@ -27,7 +27,9 @@ export function PulseView({ scan }: { scan: Scan }) {
       <div>
         <h2 id="pulse-heading" className={`type-section ${styles.sectionHeadline}`}>Pulse.</h2>
         <p className={styles.sectionBody}>A year of daily commits, with the latest activity marked in the field.</p>
-        <p className={styles.featureNote}>{scan.pulse ? `${scan.pulse.activeWeeks} active weeks · ${scan.pulse.pattern} pattern` : 'No activity data yet'}</p>
+        <p className={styles.featureNote}>
+          {scan.pulse && days.length > 0 ? `${scan.pulse.activeWeeks} active weeks · ${scan.pulse.pattern} pattern` : 'No activity data yet'}
+        </p>
       </div>
       <div className={styles.pulseCalendar} role="group" aria-label="Commit activity by day">
         {weeks.map((week, weekIndex) => (

@@ -12,6 +12,10 @@ const OWNER = 'octo'
 const REPO = 'Hello-World'
 const SCAN_URL = `/scan/${OWNER}/${REPO}`
 
+test.beforeEach(async ({ page }) => {
+  await page.setViewportSize({ width: 390, height: 844 })
+})
+
 function sseError(error: { code: string; message: string; resetAt?: string }): string {
   return `event: error\ndata: ${JSON.stringify({ error })}\n\n`
 }
@@ -88,3 +92,16 @@ test('a one-file repo says "1 file." and keeps the singular honest', async ({ pa
   await expect(page.getByRole('heading', { name: '1 file.' })).toBeVisible()
   await expect(page.locator('body')).not.toContainText('1 files')
 })
+
+for (const colorScheme of ['light', 'dark'] as const) {
+  test(`a truncated large report stays readable on a phone in ${colorScheme} mode`, async ({ page }) => {
+    await page.emulateMedia({ colorScheme })
+    await page.goto('/dev/report?variant=truncated')
+
+    await expect(page.locator('header').getByText(/GitHub cut the file list short/i)).toBeVisible()
+    await expect(page.getByRole('heading', { name: 'Pulse.' })).toBeVisible()
+    expect(await page.evaluate(() => document.documentElement.scrollWidth)).toBeLessThanOrEqual(
+      await page.evaluate(() => window.innerWidth),
+    )
+  })
+}

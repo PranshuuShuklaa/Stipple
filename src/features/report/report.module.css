@@ -92,6 +92,7 @@
   display: grid;
   grid-template-columns: minmax(220px, 0.8fr) minmax(0, 1.5fr);
   gap: 48px;
+  min-width: 0;
   padding: 120px 0;
   border-top: 1px solid var(--line);
 }
@@ -106,6 +107,7 @@
   position: relative;
   display: flex;
   gap: 4px;
+  min-width: 0;
   min-height: 150px;
   align-items: center;
   padding: 20px;
@@ -170,6 +172,7 @@
   display: flex;
   justify-content: space-between;
   gap: 16px;
+  min-width: 0;
   padding: 10px 0;
   border-bottom: 1px solid var(--line);
   color: var(--dim);
@@ -177,6 +180,17 @@
 
 .splitList strong, .biggestFiles strong { color: var(--fg); font-variant-numeric: tabular-nums; }
 .biggestFiles span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+
+@media (max-width: 820px) {
+  .featureSection {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 32px;
+  }
+
+  .structureGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}
 
 .sections > section {
   border-top: 1px solid var(--line);

@@ -58,7 +58,10 @@ export function HeroVisual() {
     let tiltX = 0
     let tiltY = 0
     let frame = 0
+    let running = true
     let rings: Ring[] = []
+    let canvasTop = 0
+    let colors = ['#9A7BFF', '#FF5C9A', '#FFB33D', '#3DDC97', '#4CC9FF']
 
     const palette = () => {
       const root = getComputedStyle(document.documentElement)
@@ -75,6 +78,8 @@ export function HeroVisual() {
       canvas.width = Math.round(width * dpr)
       canvas.height = Math.round(height * dpr)
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
+      canvasTop = rect.top
+      colors = palette()
       const wide = width > 820
       const radius = wide ? Math.min(width * 0.17, height * 0.3) : width * 0.24
       cleanZone.style.width = `${Math.max(radius * 2.5, (wide ? Math.min(width * 0.42, 560) : width * 0.8) + 68)}px`
@@ -109,7 +114,6 @@ export function HeroVisual() {
       const centerY = wide ? height * 0.55 : height * 0.22
       const radius = wide ? Math.min(width * 0.17, height * 0.3) : width * 0.24
       const pitch = (wide ? Math.min(width * 0.42, 560) : width * 0.8) / 24
-      const colors = palette()
       const rotationY = seconds * 0.00028 + tiltX * 1.2
       const rotationX = 0.28 + tiltY * 0.7
       const cosY = Math.cos(rotationY)
@@ -150,7 +154,7 @@ export function HeroVisual() {
         for (const ring of ringNow) {
           const elapsed = Math.max(0, timestamp - ring.startedAt)
           const dx = x - ring.x
-          const dy = y + canvas.getBoundingClientRect().top - ring.y
+          const dy = y + canvasTop - ring.y
           const distance = Math.hypot(dx, dy) || 1
           const offset = distance - Math.min(1400, elapsed) * 1.2
           if (Math.abs(offset) < 90) {
@@ -173,18 +177,45 @@ export function HeroVisual() {
         context.strokeStyle = `rgba(255,255,255,${Math.max(0, 0.32 * (1 - elapsed / 1400))})`
         context.lineWidth = 2
         context.beginPath()
-        context.arc(ring.x, ring.y - canvas.getBoundingClientRect().top, Math.max(0, Math.min(1400, elapsed * 1.2)), 0, Math.PI * 2)
+        context.arc(ring.x, ring.y - canvasTop, Math.max(0, Math.min(1400, elapsed * 1.2)), 0, Math.PI * 2)
         context.stroke()
       }
 
-      const rect = canvas.getBoundingClientRect()
-      cleanZone.style.transform = `translate(${centerX - Number.parseFloat(cleanZone.style.width) / 2}px, ${centerY + rect.top - Number.parseFloat(cleanZone.style.height) / 2 - rect.top}px)`
-      frame = requestAnimationFrame(draw)
+      cleanZone.style.transform = `translate(${centerX - Number.parseFloat(cleanZone.style.width) / 2}px, ${centerY - Number.parseFloat(cleanZone.style.height) / 2}px)`
+      if (running && !prefersReducedMotion.matches) frame = requestAnimationFrame(draw)
     }
 
     const prefersReducedMotion = window.matchMedia('(prefers-reduced-motion: reduce)')
+    const themeObserver = new MutationObserver(() => {
+      colors = palette()
+    })
+    const visibility = () => {
+      running = !document.hidden
+      if (running && frame === 0 && !prefersReducedMotion.matches) frame = requestAnimationFrame(draw)
+      if (!running && frame !== 0) {
+        cancelAnimationFrame(frame)
+        frame = 0
+      }
+    }
+    const intersection = new IntersectionObserver(([entry]) => {
+      running = entry.isIntersecting && !document.hidden
+      if (running && frame === 0 && !prefersReducedMotion.matches) frame = requestAnimationFrame(draw)
+      if (!running && frame !== 0) {
+        cancelAnimationFrame(frame)
+        frame = 0
+      }
+    }, { threshold: 0 })
     const reducedChange = () => {
-      if (prefersReducedMotion.matches) pickedProgress.value = 1
+      if (prefersReducedMotion.matches) {
+        pickedProgress.value = 1
+        if (frame !== 0) {
+          cancelAnimationFrame(frame)
+          frame = 0
+        }
+        draw(performance.now())
+      } else if (running && frame === 0) {
+        frame = requestAnimationFrame(draw)
+      }
     }
     resize()
     if (prefersReducedMotion.matches) pickedProgress.value = 1
@@ -192,6 +223,13 @@ export function HeroVisual() {
     window.addEventListener('pointermove', onPointerMove, { passive: true })
     window.addEventListener('pointerdown', shockwave, { passive: true })
     window.addEventListener('stipple:scan-start', scanStart)
+    window.addEventListener('stipple:palette-change', resize)
+    document.addEventListener('visibilitychange', visibility)
+    intersection.observe(canvas)
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-repo-c1', 'data-repo-c2', 'data-repo-c3', 'data-repo-c4', 'data-repo-c5'],
+    })
     prefersReducedMotion.addEventListener('change', reducedChange)
     frame = requestAnimationFrame(draw)
     return () => {
@@ -200,6 +238,10 @@ export function HeroVisual() {
       window.removeEventListener('pointermove', onPointerMove)
       window.removeEventListener('pointerdown', shockwave)
       window.removeEventListener('stipple:scan-start', scanStart)
+      window.removeEventListener('stipple:palette-change', resize)
+      document.removeEventListener('visibilitychange', visibility)
+      intersection.disconnect()
+      themeObserver.disconnect()
       prefersReducedMotion.removeEventListener('change', reducedChange)
     }
   }, [])

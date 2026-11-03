@@ -103,6 +103,7 @@ export default function GlowBackground() {
     let elapsed = 0
     let rings: Ring[] = []
     let scanStartedAt = -1
+    let palette = DEFAULT_PALETTE.map(parseColor)
 
     const measureZones = () => {
       quietRects = rectsFor('[data-q], [data-quiet-zone]')
@@ -118,6 +119,7 @@ export default function GlowBackground() {
       canvas.style.width = `${width}px`
       canvas.style.height = `${height}px`
       context.setTransform(dpr, 0, 0, dpr, 0, 0)
+      palette = paletteFromPage().map(parseColor)
       measureZones()
       frameCount = 0
       tier = reducedMotion ? 'low' : 'high'
@@ -137,11 +139,19 @@ export default function GlowBackground() {
       context.clearRect(0, 0, width, height)
       const cell = Math.max(CELL_MIN, Math.round(width / 110)) * (tier === 'low' ? 1.6 : 1)
       const rows = Math.ceil(height / cell) + 1
-      const palette = paletteFromPage().map(parseColor)
       const pointerEnabled = tier === 'high' && !reducedMotion
 
       const activeRings = rings.filter((ring) => timestamp - ring.startedAt < 1400)
       rings = activeRings
+      const ringState = activeRings.map((ring) => {
+        const elapsed = Math.max(0, timestamp - ring.startedAt)
+        return {
+          ring,
+          elapsed,
+          radius: Math.min(1400, elapsed * 1.2),
+          fade: Math.max(0, 1 - elapsed / 1400),
+        }
+      })
       const scanElapsed = scanStartedAt < 0 ? 0 : timestamp - scanStartedAt
       const surge = scanElapsed < 2300
         ? scanElapsed < 900
@@ -169,14 +179,13 @@ export default function GlowBackground() {
             value += Math.exp(-(dx * dx + dy * dy) / 45000) * 0.55
           }
           value *= 1 + 0.7 * Math.max(0, surge)
-          for (const ring of activeRings) {
-            const ringElapsed = Math.max(0, timestamp - ring.startedAt)
+          for (const { ring, radius: ringRadius, fade } of ringState) {
             const dx = x - ring.x
             const dy = y - ring.y
             const distance = Math.hypot(dx, dy) || 1
-            const offset = distance - Math.min(1400, ringElapsed) * 1.2
+            const offset = distance - ringRadius
             if (Math.abs(offset) < 90) {
-              const force = Math.cos((offset / 90) * Math.PI / 2) * 16 * (1 - ringElapsed / 1400)
+              const force = Math.cos((offset / 90) * Math.PI / 2) * 16 * fade
               value += force / 20
             }
           }
@@ -184,14 +193,13 @@ export default function GlowBackground() {
           if (value < 0.06) continue
           let drawX = x
           let drawY = y
-          for (const ring of activeRings) {
-            const ringElapsed = Math.max(0, timestamp - ring.startedAt)
+          for (const { ring, radius: ringRadius, fade } of ringState) {
             const dx = x - ring.x
             const dy = y - ring.y
             const distance = Math.hypot(dx, dy) || 1
-            const offset = distance - Math.min(1400, ringElapsed) * 1.2
+            const offset = distance - ringRadius
             if (Math.abs(offset) < 90) {
-              const force = Math.cos((offset / 90) * Math.PI / 2) * 16 * (1 - ringElapsed / 1400)
+              const force = Math.cos((offset / 90) * Math.PI / 2) * 16 * fade
               drawX += (dx / distance) * force
               drawY += (dy / distance) * force
             }
@@ -203,13 +211,12 @@ export default function GlowBackground() {
         context.fill()
       }
 
-      for (const ring of activeRings) {
-        const ringElapsed = Math.max(0, timestamp - ring.startedAt)
-        context.globalAlpha = Math.max(0, 0.32 * (1 - ringElapsed / 1400))
+      for (const { ring, radius, fade } of ringState) {
+        context.globalAlpha = 0.32 * fade
         context.strokeStyle = `rgb(${palette[0][0]}, ${palette[0][1]}, ${palette[0][2]})`
         context.lineWidth = 2
         context.beginPath()
-        context.arc(ring.x, ring.y, Math.max(0, Math.min(1400, ringElapsed * 1.2)), 0, Math.PI * 2)
+        context.arc(ring.x, ring.y, radius, 0, Math.PI * 2)
         context.stroke()
       }
       context.globalAlpha = 1
@@ -242,6 +249,10 @@ export default function GlowBackground() {
     const scanStart = () => {
       scanStartedAt = performance.now()
     }
+    const paletteChange = () => {
+      palette = paletteFromPage().map(parseColor)
+    }
+    const themeObserver = new MutationObserver(paletteChange)
     const media = window.matchMedia('(prefers-reduced-motion: reduce)')
     const motionChange = () => {
       reducedMotion = media.matches
@@ -260,6 +271,11 @@ export default function GlowBackground() {
     window.addEventListener('pointermove', pointerMove, { passive: true })
     window.addEventListener('pointerdown', pointerDown, { passive: true })
     window.addEventListener('stipple:scan-start', scanStart)
+    window.addEventListener('stipple:palette-change', paletteChange)
+    themeObserver.observe(document.documentElement, {
+      attributes: true,
+      attributeFilter: ['data-theme', 'data-glow-palette'],
+    })
     document.addEventListener('visibilitychange', visibility)
     media.addEventListener('change', motionChange)
     draw(performance.now())
@@ -273,6 +289,8 @@ export default function GlowBackground() {
       window.removeEventListener('pointermove', pointerMove)
       window.removeEventListener('pointerdown', pointerDown)
       window.removeEventListener('stipple:scan-start', scanStart)
+      window.removeEventListener('stipple:palette-change', paletteChange)
+      themeObserver.disconnect()
       document.removeEventListener('visibilitychange', visibility)
       media.removeEventListener('change', motionChange)
     }

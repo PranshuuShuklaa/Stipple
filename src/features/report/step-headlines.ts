@@ -171,7 +171,7 @@ export function pulseHeadline(scan: Scan): string {
 
 export function pulseBody(scan: Scan): string {
   const pulse = scan.pulse
-  if (!pulse) return 'No activity data yet.'
+  if (!pulse || pulse.days.length === 0) return 'No activity data yet.'
   const names = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday']
   return `Commits in ${pulse.activeWeeks} of 52 weeks. Busiest day: ${names[pulse.busiestWeekday]}. Longest streak: ${pulse.longestStreakWeeks} weeks.`
 }
