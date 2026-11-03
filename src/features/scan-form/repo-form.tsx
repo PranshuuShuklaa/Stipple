@@ -30,6 +30,7 @@ export function RepoForm() {
 
     setInvalid(false)
     setMessage('')
+    window.dispatchEvent(new Event('stipple:scan-start'))
     router.push(`/scan/${parsed.owner}/${parsed.repo}`)
   }
 

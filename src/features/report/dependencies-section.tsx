@@ -40,7 +40,7 @@ export function DependenciesSection({ scan }: { scan: Scan }) {
   }, [visible, reducedMotion])
 
   return (
-    <section id="dependencies" aria-labelledby="dependencies-heading" ref={sectionRef}>
+    <section id="dependencies" aria-labelledby="dependencies-heading" ref={sectionRef} data-q>
       <RiseText
         id="dependencies-heading"
         text="Dependencies."

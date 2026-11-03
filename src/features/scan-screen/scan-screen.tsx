@@ -342,7 +342,7 @@ export function ScanScreen({ owner, repo }: { owner: string; repo: string }) {
   const revealing = state.phase === 'revealing'
 
   return (
-    <div className="shell">
+    <div className="shell" data-q>
       <h1 ref={headingRef} tabIndex={-1} className="type-section">
         Scanning {owner}/{repo}
       </h1>

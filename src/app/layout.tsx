@@ -1,31 +1,29 @@
 import type { Metadata } from 'next'
 import { Suspense, type ReactNode } from 'react'
 import Link from 'next/link'
-import localFont from 'next/font/local'
+import { Bricolage_Grotesque, Instrument_Sans } from 'next/font/google'
+
+const fontDisplay = Bricolage_Grotesque({
+  subsets: ['latin'],
+  weight: ['700'],
+  variable: '--font-display',
+  display: 'swap',
+})
+
+const fontText = Instrument_Sans({
+  subsets: ['latin'],
+  weight: ['400', '500', '600'],
+  variable: '--font-text',
+  display: 'swap',
+})
 
 import { RouteFocus } from '@/components/ui/route-focus'
 import { ThemeToggle } from '@/components/ui/theme-toggle'
+import GlowBackground from '@/components/ui/glow-background'
 
 import '@/styles/tokens.css'
 import '@/styles/base.css'
 import '@/styles/motion.css'
-
-const fontSans = localFont({
-  src: [
-    {
-      path: '../../public/fonts/familjen-grotesk-400.ttf',
-      weight: '400',
-      style: 'normal',
-    },
-    {
-      path: '../../public/fonts/familjen-grotesk-600.ttf',
-      weight: '600',
-      style: 'normal',
-    },
-  ],
-  display: 'swap',
-  variable: '--font-sans',
-})
 
 /*
  * Runs before paint: applies the manual theme from localStorage.
@@ -54,7 +52,7 @@ export default function RootLayout({
   children,
 }: Readonly<{ children: ReactNode }>) {
   return (
-    <html lang="en" className={fontSans.variable} suppressHydrationWarning>
+    <html lang="en" className={`${fontDisplay.variable} ${fontText.variable}`} suppressHydrationWarning>
       <head>
         <script dangerouslySetInnerHTML={{ __html: themeBeforePaint }} />
         <noscript>
@@ -62,6 +60,7 @@ export default function RootLayout({
         </noscript>
       </head>
       <body>
+        <GlowBackground />
         <Suspense fallback={null}>
           <RouteFocus />
         </Suspense>
@@ -71,7 +70,24 @@ export default function RootLayout({
         <header className="site-header">
           <div className="shell">
             <Link className="wordmark" href="/">
-              stipple
+              <svg className="wordmark-mark" viewBox="0 0 26 26" aria-hidden="true">
+                <g className="wordmark-orbit">
+                  <circle cx="13" cy="4.5" r="2.6" />
+                  <circle cx="21.08" cy="10.37" r="2.6" />
+                  <circle cx="18" cy="19.88" r="2.6" />
+                  <circle cx="8" cy="19.88" r="2.6" />
+                  <circle cx="4.92" cy="10.37" r="2.6" />
+                </g>
+                <circle className="wordmark-core" cx="13" cy="13" r="2.6" />
+              </svg>
+              <span className="wordmark-letters" aria-hidden="true">
+                {'stipple'.split('').map((letter, index) => (
+                  <span className="wordmark-letter" key={`${letter}-${index}`}>
+                    {letter}
+                  </span>
+                ))}
+              </span>
+              <span className="visually-hidden">stipple</span>
             </Link>
             <ThemeToggle />
           </div>
@@ -79,6 +95,9 @@ export default function RootLayout({
         <main id="main-content" tabIndex={-1}>
           {children}
         </main>
+        <footer className="t" data-q style={{ position: 'relative', zIndex: 2, padding: '60px 24px' }}>
+          Design prototype for approval. Demo data is generated from the repo name.
+        </footer>
       </body>
     </html>
   )

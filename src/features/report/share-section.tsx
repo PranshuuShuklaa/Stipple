@@ -157,6 +157,7 @@ export function ShareSection({ scan }: { scan: Scan }) {
       id="share"
       aria-labelledby="share-heading"
       ref={sectionRef}
+      data-q
       className={styles.shareSection}
     >
       {visible && motionEnabled && (

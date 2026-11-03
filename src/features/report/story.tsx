@@ -162,6 +162,7 @@ export function Story({ scan, ariaLabel }: { scan: Scan; ariaLabel?: string }) {
           <section
             key={step.layout}
             data-step-index={index}
+            data-q
             className={index === activeIndex ? `${styles.step} ${styles.stepActive}` : styles.step}
           >
             <h2 className={`type-step ${styles.stepHeadline}`}>{step.headline}</h2>

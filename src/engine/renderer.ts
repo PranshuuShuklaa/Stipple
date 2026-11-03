@@ -146,6 +146,10 @@ export class DotEngine {
   private targetR = new Uint8ClampedArray(0)
   private targetG = new Uint8ClampedArray(0)
   private targetB = new Uint8ClampedArray(0)
+  private themeStartR = new Uint8ClampedArray(0)
+  private themeStartG = new Uint8ClampedArray(0)
+  private themeStartB = new Uint8ClampedArray(0)
+  private themeFadeProgress = 1
 
   // Animation drivers
   private progressTargets: DotProgressTarget[] = []
@@ -337,6 +341,9 @@ export class DotEngine {
     this.targetR = new Uint8ClampedArray(n)
     this.targetG = new Uint8ClampedArray(n)
     this.targetB = new Uint8ClampedArray(n)
+    this.themeStartR = new Uint8ClampedArray(n)
+    this.themeStartG = new Uint8ClampedArray(n)
+    this.themeStartB = new Uint8ClampedArray(n)
 
     this.progressTargets = Array.from({ length: n }, () => ({ p: 1 }))
     this.pointerWake.allocate(n)
@@ -1062,6 +1069,22 @@ export class DotEngine {
     }
 
     const target = this.getLayoutTarget(this.currentLayout)
+    if (!options?.instant) {
+      for (let i = 0; i < this.dotCount; i++) {
+        this.themeStartR[i] = this.r[i]
+        this.themeStartG[i] = this.g[i]
+        this.themeStartB[i] = this.b[i]
+      }
+      this.themeFadeProgress = 0
+      animate(this, {
+        themeFadeProgress: 1,
+        duration: 1800,
+        ease: 'inOutQuad',
+        update: () => this.render(),
+      })
+    } else {
+      this.themeFadeProgress = 1
+    }
     for (let i = 0; i < this.dotCount; i++) {
       this.targetR[i] = target.r[i]
       this.targetG[i] = target.g[i]
@@ -1259,6 +1282,13 @@ export class DotEngine {
         this.r[i] = this.targetR[i]
         this.g[i] = this.targetG[i]
         this.b[i] = this.targetB[i]
+      }
+
+      if (this.themeFadeProgress < 1) {
+        const themeP = this.themeFadeProgress
+        this.r[i] = Math.round(this.themeStartR[i] + (this.r[i] - this.themeStartR[i]) * themeP)
+        this.g[i] = Math.round(this.themeStartG[i] + (this.g[i] - this.themeStartG[i]) * themeP)
+        this.b[i] = Math.round(this.themeStartB[i] + (this.b[i] - this.themeStartB[i]) * themeP)
       }
 
       let radius = this.size[i] / 2

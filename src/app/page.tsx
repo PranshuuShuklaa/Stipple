@@ -2,11 +2,15 @@
 
 import { useRef, useState, useCallback, useMemo } from 'react'
 import { DotStage } from '@/components/ui/dot-stage'
+import { HeroVisual } from '@/components/ui/hero-visual'
 import { RepoForm } from '@/features/scan-form/repo-form'
 import { IntroOverlay } from '@/features/intro/intro-overlay'
+import { NameIntro } from '@/features/intro/name-intro'
 import type { DotEngine } from '@/engine/renderer'
 import { createScanFixture } from '@/lib/demo/scan-fixture'
 import styles from './home.module.css'
+
+const INTRO_STYLE: 'name' | 'dots' = 'name'
 
 export default function HomePage() {
   const demoScan = useMemo(() => createScanFixture('stipple/stipple'), [])
@@ -38,8 +42,9 @@ export default function HomePage() {
 
   return (
     <>
+      {INTRO_STYLE === 'name' && <NameIntro onDone={handleIntroDone} />}
       {/* Boot animation overlay — removed from DOM after completion */}
-      {!introDone && (
+      {INTRO_STYLE === 'dots' && !introDone && (
         <IntroOverlay
           stageRef={stageContainerRef}
           headlineRef={headlineRef}
@@ -50,17 +55,29 @@ export default function HomePage() {
       )}
 
       <div className="home">
-        <div className="shell">
-          <h1 ref={headlineRef} className={`${styles.headline} type-display`}>
-            Your repo, <br />
-            one dot per file.
+        <section className={styles.hero}>
+          <HeroVisual />
+          <div className="shell">
+          <h1
+            ref={headlineRef}
+            className={`${styles.headline} type-display t`}
+            data-q
+            aria-label="Your repo, one dot per file."
+          >
+            <span className={styles.headlineMask} aria-hidden="true">
+              <span className="headline-letter">Your repo,</span>
+            </span>
+            <span className={styles.headlineMask} aria-hidden="true">
+              <span className="headline-letter">one dot per file.</span>
+            </span>
           </h1>
-          <p className={styles.sentence}>
+          <p className={`${styles.sentence} t`} data-q>
             Paste a public GitHub repo, then scroll through its story: files,
             languages, activity and folders.
           </p>
           <RepoForm />
-        </div>
+          </div>
+        </section>
 
         <section
           className={`${styles.demo} shell`}
@@ -68,7 +85,7 @@ export default function HomePage() {
         >
           <h2
             id="demo-heading"
-            className={`${styles.demoLabel} type-small`}
+            className={`${styles.demoLabel} type-small t`} data-q
           >
             Demo — sample data, not a real repository
           </h2>

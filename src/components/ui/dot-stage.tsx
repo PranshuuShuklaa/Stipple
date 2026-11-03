@@ -224,7 +224,11 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     const handleThemeWave = () => {
       engine.updateTheme(undefined, { instant: true })
     }
+    const handlePaletteChange = () => {
+      engine.updateTheme()
+    }
     window.addEventListener(THEME_WAVE_EVENT, handleThemeWave)
+    window.addEventListener('stipple:palette-change', handlePaletteChange)
 
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)')
     const handleMediaChange = () => {
@@ -235,6 +239,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     return () => {
       observer.disconnect()
       window.removeEventListener(THEME_WAVE_EVENT, handleThemeWave)
+      window.removeEventListener('stipple:palette-change', handlePaletteChange)
       mediaQuery.removeEventListener('change', handleMediaChange)
       engine.destroy()
       engineRef.current = null
@@ -350,7 +355,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
   }, [hoveredFileIndex, scan.files])
 
   return (
-    <div ref={containerRef} className={stageClassName}>
+    <div ref={containerRef} className={stageClassName} data-clean-zone>
       <canvas
         ref={canvasRef}
         className={styles.canvas}
@@ -430,11 +435,11 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       )}
 
       {/* Hover readout top left */}
-      {variant === 'full' && <p className={styles.readout} aria-live="polite">{readoutContent}</p>}
+      {variant === 'full' && <p className={styles.readout} data-q aria-live="polite">{readoutContent}</p>}
 
       {/* Legend bottom left */}
       {variant === 'full' && (
-        <div className={styles.legend} role="group" aria-label="Visualization legend">
+        <div className={styles.legend} data-q role="group" aria-label="Visualization legend">
           {currentLayout === 'files' && (
             <>
               <span>

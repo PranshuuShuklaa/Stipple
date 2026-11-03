@@ -24,13 +24,15 @@ html {
 }
 
 body {
-  font-family: var(--font-sans, sans-serif);
-  font-size: clamp(1rem, 0.4vw + 0.86rem, 1.125rem); /* body 16-18 px */
-  line-height: 1.5;
+  font-family: var(--font-text, 'Instrument Sans', system-ui, sans-serif);
+  font-size: clamp(1.125rem, 0.5vw + 0.9rem, 1.375rem); /* body 18-22 px */
+  font-weight: 500;
+  line-height: 1.45;
   background: var(--bg);
   color: var(--fg);
   -webkit-font-smoothing: antialiased;
   text-rendering: optimizeLegibility;
+  overflow-x: hidden;
 }
 
 img,
@@ -70,29 +72,65 @@ ol {
 h1,
 h2,
 h3 {
-  font-weight: 600;
-  line-height: 1;
-  letter-spacing: -0.035em;
+  font-family: var(--font-display, 'Bricolage Grotesque', system-ui, sans-serif);
+  font-weight: 700;
+  line-height: 0.92;
+  letter-spacing: -0.05em;
   text-wrap: balance;
 }
 
 /* display / page headline (REFERENCE.md) */
 .type-display {
-  font-size: clamp(44px, 7.6vw, 108px);
-  letter-spacing: -0.045em;
-  line-height: 0.9;
+  font-size: clamp(48px, 9.2vw, 150px);
+  letter-spacing: -0.05em;
+  line-height: 0.92;
 }
 
 .type-section {
-  font-size: clamp(30px, 4vw, 52px);
+  font-size: clamp(32px, 4.4vw, 60px);
+  line-height: 1;
+  letter-spacing: -0.045em;
 }
 
 .type-step {
-  font-size: clamp(32px, 4.2vw, 56px);
+  font-size: clamp(32px, 4.4vw, 56px);
+  letter-spacing: -0.045em;
+  line-height: 1;
 }
 
 .type-small {
   font-size: clamp(14px, 0.3vw + 0.8rem, 15px);
+}
+
+.glow-background,
+.grain {
+  position: fixed;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.glow-background {
+  z-index: 0;
+}
+
+.grain {
+  z-index: 1;
+  inset: -50%;
+  width: 200%;
+  height: 200%;
+  opacity: var(--grain-opacity);
+  mix-blend-mode: overlay;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='160' height='160'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.8' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  animation: grain-jitter 0.9s steps(1) infinite;
+}
+
+@keyframes grain-jitter {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-3%, 2%); }
+  50% { transform: translate(2%, -3%); }
+  75% { transform: translate(-2%, -2%); }
 }
 
 .tabular {
@@ -168,10 +206,65 @@ h3 {
 }
 
 .wordmark {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
   font-weight: 600;
   font-size: clamp(1.25rem, 1vw + 0.9rem, 1.5rem);
   letter-spacing: -0.02em;
   line-height: 1;
+  transform-origin: 0 0;
+  will-change: transform;
+}
+
+.wordmark-mark {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  overflow: visible;
+}
+
+.wordmark-orbit {
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wordmark-orbit 9s linear infinite;
+}
+
+.wordmark-orbit circle:nth-child(1) { fill: var(--c1); }
+.wordmark-orbit circle:nth-child(2) { fill: var(--c2); }
+.wordmark-orbit circle:nth-child(3) { fill: var(--c3); }
+.wordmark-orbit circle:nth-child(4) { fill: var(--c4); }
+.wordmark-orbit circle:nth-child(5) { fill: var(--c5); }
+
+.wordmark-core {
+  fill: var(--fg);
+  transform-box: fill-box;
+  transform-origin: center;
+  animation: wordmark-pulse 2.4s ease-in-out infinite;
+}
+
+.wordmark-letters {
+  display: inline-flex;
+}
+
+.wordmark-letter {
+  display: inline-block;
+  will-change: color, translate;
+}
+
+@keyframes wordmark-orbit {
+  to { transform: rotate(360deg); }
+}
+
+@keyframes wordmark-pulse {
+  50% { transform: scale(1.5); }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .wordmark-orbit,
+  .wordmark-core {
+    animation: none;
+  }
 }
 
 /* Theme toggle: show the icon of the theme you would land in (sun in dark) */
@@ -229,6 +322,72 @@ h3 {
 
   :root:not([data-theme="light"]) .theme-toggle .icon-moon {
     display: none;
+  }
+}
+
+/* Film grain overlay animation */
+@keyframes grain-step {
+  0% { transform: translate(0, 0); }
+  25% { transform: translate(-3%, 2%); }
+  50% { transform: translate(2%, -3%); }
+  75% { transform: translate(-2%, -2%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .grain { animation: none !important; }
+}
+
+/* Readability: quiet zones and text halo (REDESIGN-SPEC.md) */
+
+/* Quiet zone: dots within 90 px of a quiet rectangle shrink */
+[data-q],
+.t,
+[data-quiet-zone],
+.quiet-zone {
+  position: relative;
+}
+
+/* The glow canvas handles the quiet factor internally; this class
+   is the marker for elements that must stay readable. */
+
+/* Text halo: soft glow behind every text block */
+.t,
+[data-q],
+[data-quiet-zone],
+.quiet-zone,
+.data-q {
+  text-shadow: 0 0 18px var(--bg), 0 0 6px var(--bg);
+}
+
+[data-q],
+[data-quiet-zone] {
+  position: relative;
+  z-index: 2;
+}
+
+/* Body text uses full foreground at 0.9 opacity, weight 500 (REDESIGN-SPEC.md) */
+body,
+.p,
+[data-body] {
+  color: var(--fg);
+  opacity: 0.9;
+  font-weight: 500;
+}
+
+/* Secondary text uses --dim, never lower contrast than AA */
+.dim,
+[data-dim],
+.t[aria-live="polite"] {
+  color: var(--dim);
+}
+
+/* Ensure text stays selectable and accessible */
+h1, h2, h3, h4, p, a, span, button {
+  text-shadow: inherit;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .grain {
+    animation: none;
   }
 }
 

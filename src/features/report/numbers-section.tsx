@@ -36,7 +36,7 @@ export function NumbersSection({ scan }: { scan: Scan }) {
   const stats = statsOf(scan)
 
   return (
-    <section id="numbers" aria-labelledby="numbers-heading" ref={sectionRef}>
+    <section id="numbers" aria-labelledby="numbers-heading" ref={sectionRef} data-q>
       <RiseText id="numbers-heading" text="Numbers." className={`type-section ${styles.sectionHeadline}`} />
       <ul className={styles.statsRow}>
         {stats.map((stat) => (
