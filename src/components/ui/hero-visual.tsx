@@ -84,6 +84,10 @@ export function HeroVisual() {
       const radius = wide ? Math.min(width * 0.17, height * 0.3) : width * 0.24
       cleanZone.style.width = `${Math.max(radius * 2.5, (wide ? Math.min(width * 0.42, 560) : width * 0.8) + 68)}px`
       cleanZone.style.height = `${Math.max(radius * 2.5, (wide ? Math.min(width * 0.42, 560) / 24 * 10 : width * 0.27) + 68)}px`
+      const centerX = wide ? width * 0.86 : width / 2
+      const centerY = wide ? height * 0.55 : height * 0.22
+      cleanZone.style.transform = `translate(${centerX - Number.parseFloat(cleanZone.style.width) / 2}px, ${centerY - Number.parseFloat(cleanZone.style.height) / 2}px)`
+      window.dispatchEvent(new Event('stipple:zones-change'))
     }
 
     const shockwave = (event: PointerEvent) => {
@@ -181,7 +185,6 @@ export function HeroVisual() {
         context.stroke()
       }
 
-      cleanZone.style.transform = `translate(${centerX - Number.parseFloat(cleanZone.style.width) / 2}px, ${centerY - Number.parseFloat(cleanZone.style.height) / 2}px)`
       if (running && !prefersReducedMotion.matches) frame = requestAnimationFrame(draw)
     }
 
