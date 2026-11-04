@@ -19,6 +19,13 @@ const fixture = vi.hoisted(() => (owner: string, repo: string) => ({
     health: { score: 83, checks: [{ name: 'README', passed: true }] },
     dependencies: ['zod'],
     flags: { truncated: false, statsPending: false },
+    pulse: null,
+    structure: {
+      codeSplit: { source: 0, tests: 0, docs: 0, config: 0, assets: 0, other: 0 },
+      largest: [],
+      maxDepth: 0,
+      topFolders: 0,
+    },
     scannedAt: '2026-10-20T00:00:00.000Z',
   },
 }))

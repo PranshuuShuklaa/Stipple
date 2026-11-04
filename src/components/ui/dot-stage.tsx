@@ -40,6 +40,24 @@ function formatBytes(bytes: number): string {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`
 }
 
+function formatPulseDate(dateStr: string, commits: number): string {
+  const commitText = commits === 1 ? '1 commit' : `${commits} commits`
+  if (!dateStr) return commitText
+  const parts = dateStr.split('-')
+  if (parts.length === 3) {
+    const year = parseInt(parts[0]!, 10)
+    const month = parseInt(parts[1]!, 10) - 1
+    const day = parseInt(parts[2]!, 10)
+    const d = new Date(Date.UTC(year, month, day))
+    if (!isNaN(d.getTime())) {
+      const weekdays = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat']
+      const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec']
+      return `${weekdays[d.getUTCDay()]}, ${d.getUTCDate()} ${months[d.getUTCMonth()]} ${d.getUTCFullYear()}: ${commitText}`
+    }
+  }
+  return `${dateStr}: ${commitText}`
+}
+
 function subscribeReducedMotion(onChange: () => void): () => void {
   const query = window.matchMedia('(prefers-reduced-motion: reduce)')
   query.addEventListener('change', onChange)
@@ -347,12 +365,19 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
   // Hover readout text
   const readoutContent = useMemo(() => {
     if (hoveredFileIndex === null) {
-      return 'Hover a dot to see its file.'
+      return currentLayout === 'pulse' ? 'Hover a day to see commits.' : 'Hover a dot to see its file.'
+    }
+    if (currentLayout === 'pulse') {
+      const day = engineRef.current?.getPulseDay(hoveredFileIndex) ?? scan.pulse?.days?.[hoveredFileIndex]
+      if (day) {
+        return formatPulseDate(day.date, day.commits)
+      }
+      return 'Hover a day to see commits.'
     }
     const file = scan.files[hoveredFileIndex]
     if (!file) return 'Hover a dot to see its file.'
     return `${file.path}, ${file.language || 'Other'}, ${formatBytes(file.size)}`
-  }, [hoveredFileIndex, scan.files])
+  }, [hoveredFileIndex, scan.files, scan.pulse, currentLayout])
 
   return (
     <div ref={containerRef} className={stageClassName} data-clean-zone>

@@ -8,24 +8,31 @@ import type { Scan, ScanFile } from '@/lib/types/scan'
  */
 
 export const HARD_DOT_CAP = 2500
+export const MIN_POOL_SIZE = 364
 
 export interface DotField {
   scan: Scan
   dotCount: number
   totalFiles: number
   filesPerDot: number
+  poolSize: number
+}
+
+export function calculatePoolSize(fileDots: number): number {
+  return Math.max(fileDots, MIN_POOL_SIZE)
 }
 
 export function buildDotField(scan: Scan, maxDots: number): DotField {
   const total = scan.files.length
   const dotCount = Math.max(0, Math.min(total, maxDots))
+  const poolSize = calculatePoolSize(dotCount)
 
   if (dotCount === total) {
-    return { scan, dotCount, totalFiles: total, filesPerDot: 1 }
+    return { scan, dotCount, totalFiles: total, filesPerDot: 1, poolSize }
   }
 
   if (dotCount === 0) {
-    return { scan: { ...scan, files: [] }, dotCount: 0, totalFiles: 0, filesPerDot: 1 }
+    return { scan: { ...scan, files: [] }, dotCount: 0, totalFiles: 0, filesPerDot: 1, poolSize }
   }
 
   const representatives = new Array<ScanFile>(dotCount)
@@ -49,5 +56,6 @@ export function buildDotField(scan: Scan, maxDots: number): DotField {
     dotCount,
     totalFiles: total,
     filesPerDot: Math.ceil(total / dotCount),
+    poolSize,
   }
 }

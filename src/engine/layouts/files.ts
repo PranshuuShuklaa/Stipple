@@ -46,9 +46,11 @@ export interface ThemeColors {
 export function calculateFilesLayout(
   scan: Scan,
   viewport: Viewport,
-  theme: ThemeColors
+  theme: ThemeColors,
+  poolSize?: number
 ): LayoutTarget {
   const n = scan.files.length
+  const total = poolSize !== undefined ? Math.max(n, poolSize) : n
   const W = viewport.width
   const H = viewport.height
 
@@ -63,13 +65,13 @@ export function calculateFilesLayout(
   const cy = H / 2 - 8
   const halfS = s / 2
 
-  const x = new Float32Array(n)
-  const y = new Float32Array(n)
-  const size = new Float32Array(n)
-  const alpha = new Float32Array(n)
-  const r = new Uint8ClampedArray(n)
-  const g = new Uint8ClampedArray(n)
-  const b = new Uint8ClampedArray(n)
+  const x = new Float32Array(total)
+  const y = new Float32Array(total)
+  const size = new Float32Array(total)
+  const alpha = new Float32Array(total)
+  const r = new Uint8ClampedArray(total)
+  const g = new Uint8ClampedArray(total)
+  const b = new Uint8ClampedArray(total)
 
   const [fgR, fgG, fgB] = theme.fg
   const colorPerLanguage = createLanguageIndexer(scan)
@@ -99,6 +101,17 @@ export function calculateFilesLayout(
     }
   }
 
+  // Unused dots wait at the stage center with alpha 0
+  for (let i = n; i < total; i++) {
+    x[i] = cx - halfS
+    y[i] = cy - halfS
+    size[i] = s
+    alpha[i] = 0
+    r[i] = fgR
+    g[i] = fgG
+    b[i] = fgB
+  }
+
   return {
     x,
     y,
@@ -107,7 +120,7 @@ export function calculateFilesLayout(
     r,
     g,
     b,
-    dotCount: n,
+    dotCount: total,
     cols,
     rows,
   }

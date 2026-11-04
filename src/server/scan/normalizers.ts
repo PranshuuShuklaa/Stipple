@@ -23,6 +23,10 @@ import type {
 
 export const ACTIVITY_WEEKS = 16
 
+function commitCount(value: number): number {
+  return Number.isFinite(value) ? Math.max(0, Math.floor(value)) : 0
+}
+
 /** Root-level dependency manifests we read, in a stable order. */
 export const MANIFEST_FILES = ['Cargo.toml', 'package.json', 'pom.xml', 'requirements.txt'] as const
 
@@ -106,20 +110,20 @@ export function activityFromRaw(weeks: RawCommitActivityWeek[]): ScanActivityWee
     .slice()
     .sort((a, b) => a.week - b.week)
     .slice(-ACTIVITY_WEEKS)
-    .map((week) => ({ week: weekIso(week.week), commits: Math.max(0, Math.floor(week.total)) }))
+    .map((week) => ({ week: weekIso(week.week), commits: commitCount(week.total) }))
 }
 
 /** Named contributors only, strongest first. Anonymous rows (null author) are dropped. */
 export function contributorsFromRaw(members: RawContributorStats[]): ScanContributor[] {
   return members
     .filter((member) => member.author !== null && typeof member.author.login === 'string')
-    .map(({ author, total }) => ({ login: author!.login, commits: Math.max(0, Math.floor(total)) }))
+    .map(({ author, total }) => ({ login: author!.login, commits: commitCount(total) }))
     .sort((a, b) => b.commits - a.commits || a.login.localeCompare(b.login))
 }
 
 /** Lifetime commit total from the contributor statistics. */
 export function commitsTotalFromRaw(members: RawContributorStats[]): number {
-  return members.reduce((sum, member) => sum + Math.max(0, Math.floor(member.total)), 0)
+  return members.reduce((sum, member) => sum + commitCount(member.total), 0)
 }
 
 export function unescapeXml(value: string): string {

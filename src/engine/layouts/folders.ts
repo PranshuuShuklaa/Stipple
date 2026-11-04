@@ -42,9 +42,11 @@ export const FOLDER_CENTERS: readonly [number, number][] = [
 export function calculateFoldersLayout(
   scan: Scan,
   viewport: Viewport,
-  theme: ThemeColors
+  theme: ThemeColors,
+  poolSize?: number
 ): FoldersLayoutTarget {
   const n = scan.files.length
+  const total = poolSize !== undefined ? Math.max(n, poolSize) : n
   const W = viewport.width
   const H = viewport.height
 
@@ -74,7 +76,7 @@ export function calculateFoldersLayout(
   namedFolders.forEach(([folder], slot) => folderToSlot.set(folder, slot))
 
   // Assign each dot to a folder slot (0..4) and index k within that cluster
-  const dotFolder = new Int32Array(n)
+  const dotFolder = new Int32Array(total)
   const dotK = new Int32Array(n)
   const clusterCounts = [0, 0, 0, 0, 0]
 
@@ -86,20 +88,20 @@ export function calculateFoldersLayout(
     clusterCounts[slot]++
   }
 
-  const x = new Float32Array(n)
-  const y = new Float32Array(n)
-  const size = new Float32Array(n)
-  const alpha = new Float32Array(n)
-  const rArr = new Uint8ClampedArray(n)
-  const gArr = new Uint8ClampedArray(n)
-  const bArr = new Uint8ClampedArray(n)
+  const x = new Float32Array(total)
+  const y = new Float32Array(total)
+  const size = new Float32Array(total)
+  const alpha = new Float32Array(total)
+  const rArr = new Uint8ClampedArray(total)
+  const gArr = new Uint8ClampedArray(total)
+  const bArr = new Uint8ClampedArray(total)
 
   const themeColors = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
 
   for (let i = 0; i < n; i++) {
     const f = dotFolder[i]
     const k = dotK[i]
-    const [qx, qy] = FOLDER_CENTERS[f]
+    const [qx, qy] = FOLDER_CENTERS[f] ?? [0.5, 0.5]
 
     const angle = k * 2.39996
     const radius = 0.4 * P * Math.sqrt(k + 0.5)
@@ -113,6 +115,21 @@ export function calculateFoldersLayout(
     rArr[i] = cr
     gArr[i] = cg
     bArr[i] = cb
+  }
+
+  // Unused dots wait at the stage center with alpha 0
+  const cx = W / 2
+  const cy = H / 2 - 8
+  const [fgR, fgG, fgB] = theme.fg
+  for (let i = n; i < total; i++) {
+    dotFolder[i] = -1
+    x[i] = cx - halfS
+    y[i] = cy - halfS
+    size[i] = s
+    alpha[i] = 0
+    rArr[i] = fgR
+    gArr[i] = fgG
+    bArr[i] = fgB
   }
 
   // Create labels only for clusters that hold files. A one-folder repo gets
@@ -160,7 +177,7 @@ export function calculateFoldersLayout(
     r: rArr,
     g: gArr,
     b: bArr,
-    dotCount: n,
+    dotCount: total,
     cols: 24,
     rows: 10,
     labels,

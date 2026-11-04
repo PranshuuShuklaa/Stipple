@@ -17,9 +17,11 @@ import type { LayoutTarget, ThemeColors, Viewport } from './files'
 export function calculateActivityLayout(
   scan: Scan,
   viewport: Viewport,
-  theme: ThemeColors
+  theme: ThemeColors,
+  poolSize?: number
 ): LayoutTarget {
   const n = scan.files.length
+  const total = poolSize !== undefined ? Math.max(n, poolSize) : n
   const W = viewport.width
   const H = viewport.height
 
@@ -102,13 +104,13 @@ export function calculateActivityLayout(
   const s = Math.min(baseS, Math.max(4, 0.8 * Math.min(Px, Pv)))
   const halfS = s / 2
 
-  const x = new Float32Array(n)
-  const y = new Float32Array(n)
-  const size = new Float32Array(n)
-  const alpha = new Float32Array(n)
-  const rArr = new Uint8ClampedArray(n)
-  const gArr = new Uint8ClampedArray(n)
-  const bArr = new Uint8ClampedArray(n)
+  const x = new Float32Array(total)
+  const y = new Float32Array(total)
+  const size = new Float32Array(total)
+  const alpha = new Float32Array(total)
+  const rArr = new Uint8ClampedArray(total)
+  const gArr = new Uint8ClampedArray(total)
+  const bArr = new Uint8ClampedArray(total)
 
   const [c1R, c1G, c1B] = theme.c1
 
@@ -125,6 +127,18 @@ export function calculateActivityLayout(
     bArr[i] = c1B
   }
 
+  // Unused dots wait at the stage center with alpha 0
+  const cy = H / 2 - 8
+  for (let i = n; i < total; i++) {
+    x[i] = cx - halfS
+    y[i] = cy - halfS
+    size[i] = s
+    alpha[i] = 0
+    rArr[i] = c1R
+    gArr[i] = c1G
+    bArr[i] = c1B
+  }
+
   return {
     x,
     y,
@@ -133,7 +147,7 @@ export function calculateActivityLayout(
     r: rArr,
     g: gArr,
     b: bArr,
-    dotCount: n,
+    dotCount: total,
     cols: 16,
     rows: maxWeekCount,
   }

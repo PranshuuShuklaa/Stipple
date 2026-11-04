@@ -85,7 +85,7 @@ export interface Scan {
   health: ScanHealth
   dependencies: string[]
   flags: ScanFlags
-  pulse?: ScanPulse
+  pulse?: ScanPulse | null
   structure?: ScanStructure
   scannedAt: string
 }

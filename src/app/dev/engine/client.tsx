@@ -21,6 +21,11 @@ const LAYOUTS: { id: LayoutName; label: string; desc: string }[] = [
     desc: 'Stacked bar of 12-row columns, colored by language (c1..c5).',
   },
   {
+    id: 'pulse',
+    label: 'Pulse',
+    desc: '52×7 calendar of daily commits (364 dots), commit levels, accent color, and last commit ring.',
+  },
+  {
     id: 'activity',
     label: 'Activity',
     desc: '16 weekly columns, c1 color, opacity gradient 0.2 to 1.0 by recency.',
@@ -53,7 +58,8 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
     stageRef.current?.morphTo(layout)
     if (statusTimerRef.current !== null) window.clearTimeout(statusTimerRef.current)
     statusTimerRef.current = window.setTimeout(() => {
-      setStatusMsg(`${layout.charAt(0).toUpperCase() + layout.slice(1)} layout active (240 dots)`)
+      const dotCount = layout === 'pulse' ? 364 : scan.files.length || 240
+      setStatusMsg(`${layout.charAt(0).toUpperCase() + layout.slice(1)} layout active (${dotCount} dots)`)
       statusTimerRef.current = null
     }, 1250)
   }
@@ -76,7 +82,7 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
   // Rapid switching test to verify animation stability and zero glitches
   const handleRapidTest = () => {
     setStatusMsg('Rapid switching test in progress...')
-    const sequence: LayoutName[] = ['languages', 'folders', 'activity', 'files', 'languages']
+    const sequence: LayoutName[] = ['languages', 'pulse', 'folders', 'activity', 'files', 'pulse']
     sequence.forEach((layout, index) => {
       setTimeout(() => {
         setActiveLayout(layout)

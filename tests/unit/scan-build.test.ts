@@ -188,6 +188,23 @@ describe('buildScan (happy path)', () => {
     expect(scan.activity[15]).toMatchObject({ commits: 51 })
   })
 
+  it('builds the 52-week pulse and structure summaries from the same responses', () => {
+    expect(scan.pulse?.days).toHaveLength(364)
+    expect(scan.pulse?.activeWeeks).toBe(51)
+    expect(scan.structure).toEqual({
+      codeSplit: { source: 2, tests: 0, docs: 1, config: 2, assets: 0, other: 0 },
+      largest: [
+        { path: '.github/workflows/ci.yml', size: 80 },
+        { path: 'package.json', size: 40 },
+        { path: 'README.md', size: 24 },
+        { path: 'src/index.ts', size: 10 },
+        { path: 'src/runtime.js', size: 6 },
+      ],
+      maxDepth: 2,
+      topFolders: 2,
+    })
+  })
+
   it('builds contributors and the lifetime commit total from the statistics', () => {
     expect(scan.contributors).toEqual([{ login: OWNER, commits: 12 }])
     expect(scan.commits).toBe(17)
@@ -322,6 +339,7 @@ describe('buildScan (degradations)', () => {
 
     expect(scan.flags.statsPending).toBe(true)
     expect(scan.activity).toEqual([])
+    expect(scan.pulse).toBeNull()
     expect(scan.contributors).toEqual([])
     expect(scan.commits).toBe(0)
 
@@ -347,6 +365,7 @@ describe('buildScan (degradations)', () => {
 
     expect(scan.flags.statsPending).toBe(true)
     expect(scan.activity).toHaveLength(16)
+    expect(scan.pulse?.days).toHaveLength(364)
     expect(scan.contributors).toEqual([])
     expect(scan.commits).toBe(0)
   })

@@ -17,9 +17,11 @@ import { createLanguageIndexer } from './language-colors'
 export function calculateLanguagesLayout(
   scan: Scan,
   viewport: Viewport,
-  theme: ThemeColors
+  theme: ThemeColors,
+  poolSize?: number
 ): LayoutTarget {
   const n = scan.files.length
+  const total = poolSize !== undefined ? Math.max(n, poolSize) : n
   const W = viewport.width
   const H = viewport.height
 
@@ -43,13 +45,13 @@ export function calculateLanguagesLayout(
     ranks[indices[r]] = r
   }
 
-  const x = new Float32Array(n)
-  const y = new Float32Array(n)
-  const size = new Float32Array(n)
-  const alpha = new Float32Array(n)
-  const rArr = new Uint8ClampedArray(n)
-  const gArr = new Uint8ClampedArray(n)
-  const bArr = new Uint8ClampedArray(n)
+  const x = new Float32Array(total)
+  const y = new Float32Array(total)
+  const size = new Float32Array(total)
+  const alpha = new Float32Array(total)
+  const rArr = new Uint8ClampedArray(total)
+  const gArr = new Uint8ClampedArray(total)
+  const bArr = new Uint8ClampedArray(total)
 
   const themeColors = [theme.c1, theme.c2, theme.c3, theme.c4, theme.c5]
   const hasLanguages = scan.languages.length > 0
@@ -74,6 +76,18 @@ export function calculateLanguagesLayout(
     bArr[i] = cb
   }
 
+  // Unused dots wait at the stage center with alpha 0
+  const [fgR, fgG, fgB] = theme.fg
+  for (let i = n; i < total; i++) {
+    x[i] = cx - halfS
+    y[i] = cy - halfS
+    size[i] = s
+    alpha[i] = 0
+    rArr[i] = fgR
+    gArr[i] = fgG
+    bArr[i] = fgB
+  }
+
   return {
     x,
     y,
@@ -82,7 +96,7 @@ export function calculateLanguagesLayout(
     r: rArr,
     g: gArr,
     b: bArr,
-    dotCount: n,
+    dotCount: total,
     cols: maxCols,
     rows,
   }

@@ -159,7 +159,11 @@ export function createScanFixture(seedOrRepo: number | string = 'stipple/stipple
   const name = repoParts[1] || 'stipple'
   const pulseDays = Array.from({ length: 364 }, (_, index) => {
     const date = new Date(baseDate.getTime() - (363 - index) * 24 * 60 * 60 * 1000)
-    return { date: date.toISOString().slice(0, 10), commits: Math.floor(rng() * 8) }
+    const dayInYear = index % 364
+    const burst = (dayInYear >= 42 && dayInYear < 70) || (dayInYear >= 188 && dayInYear < 204)
+    const gap = dayInYear % 23 < 15
+    const commits = gap ? 0 : burst ? 2 + Math.floor(rng() * 10) : Math.floor(rng() * 3)
+    return { date: date.toISOString().slice(0, 10), commits }
   })
 
   return {

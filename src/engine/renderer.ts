@@ -1,5 +1,5 @@
 import { animate, stagger } from 'animejs'
-import type { Scan } from '@/lib/types/scan'
+import type { Scan, ScanPulseDay } from '@/lib/types/scan'
 import { MOTION } from './motion'
 import {
   computeStoryDelays,
@@ -12,7 +12,7 @@ import { calculateFilesLayout, type LayoutTarget, type ThemeColors, type Viewpor
 import { calculateLanguagesLayout } from './layouts/languages'
 import { calculateActivityLayout } from './layouts/activity'
 import { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
-import { calculatePulseLayout } from './layouts/pulse'
+import { calculatePulseLayout, normalizePulseDays, getPulseLabelsData, type PulseLayoutTarget, type PulseLabelsData } from './layouts/pulse'
 import { calculateStructureLayout } from './layouts/structure'
 import { resolveThemeColors } from './colors'
 import { SpatialGrid } from './spatial-grid'
@@ -24,7 +24,7 @@ import {
   type QualityTierName,
 } from './quality'
 import { publishQualityTier } from './quality-signal'
-import { buildDotField, HARD_DOT_CAP, type DotField } from './dot-field'
+import { buildDotField, HARD_DOT_CAP, calculatePoolSize, type DotField } from './dot-field'
 import { PointerWakeEffect } from './effects/pointer-wake'
 import { ShockwaveEffect } from './effects/shockwave'
 import { SweepEffect, type SweepMode } from './effects/sweep'
@@ -189,6 +189,11 @@ export class DotEngine {
   private clusterDrag = new ClusterDragEffect()
   private folderClusterOf: Int32Array | null = null
   private clusterOffsetsScratch = new Float32Array(0)
+  // Pulse animation states: reveal column sweep, last commit ring
+  private pulseRevealed = false
+  private pulseColumnProgress = new Float32Array(52).fill(1)
+  private pulseRevealAnimation: ReturnType<typeof animate> | null = null
+  private pulseLastCommitIndex = -1
   // Scan sweep: gray-held dots, line and shimmer (loading screen only)
   private sweep = new SweepEffect()
   private pointerX = -9999
@@ -316,7 +321,7 @@ export class DotEngine {
     const field = buildDotField(this.rawScan, maxDots)
     this.scan = field.scan
     this.dotField = field
-    this.dotCount = field.dotCount
+    this.dotCount = field.poolSize
 
     const n = this.dotCount
     this.x = new Float32Array(n)
@@ -632,18 +637,18 @@ export class DotEngine {
     const viewport: Viewport = { width: this.width, height: this.height }
     switch (layout) {
       case 'languages':
-        return calculateLanguagesLayout(this.scan, viewport, this.theme)
+        return calculateLanguagesLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'activity':
-        return calculateActivityLayout(this.scan, viewport, this.theme)
+        return calculateActivityLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'folders':
-        return calculateFoldersLayout(this.scan, viewport, this.theme)
+        return calculateFoldersLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'pulse':
-        return calculatePulseLayout(this.scan, viewport, this.theme)
+        return calculatePulseLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'structure':
-        return calculateStructureLayout(this.scan, viewport, this.theme)
+        return calculateStructureLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'files':
       default:
-        return calculateFilesLayout(this.scan, viewport, this.theme)
+        return calculateFilesLayout(this.scan, viewport, this.theme, this.dotCount)
     }
   }
 
@@ -754,6 +759,16 @@ export class DotEngine {
     } else {
       this.leaveClusters()
     }
+    if (layout === 'pulse') {
+      this.pulseLastCommitIndex =
+        'lastCommitIndex' in target ? (target as PulseLayoutTarget).lastCommitIndex : -1
+    } else {
+      this.pulseLastCommitIndex = -1
+      if (this.pulseRevealAnimation) {
+        this.pulseRevealAnimation.pause()
+        this.pulseRevealAnimation = null
+      }
+    }
     const picked = pickMorphOrigin(options?.origin, this.lastClick)
     // Grid stagger `from: [x, y]` expects grid fractions, not canvas pixels.
     const origin = Array.isArray(picked) ? pixelOriginToFraction(picked, this.width, this.height) : picked
@@ -822,6 +837,10 @@ export class DotEngine {
         this.b[i] = this.targetB[i]
       }
       this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
+      if (layout === 'pulse') {
+        this.pulseRevealed = true
+        this.pulseColumnProgress.fill(1)
+      }
       this.render()
       return
     }
@@ -837,12 +856,53 @@ export class DotEngine {
       ease: MOTION.easing.inOut,
       onComplete: () => {
         this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
+        if (layout === 'pulse') {
+          this.triggerPulseReveal()
+        }
       },
     })
 
     // Build spatial grid with destination coordinates so hover works immediately
     this.spatialGrid.build(target.x, target.y, target.size, this.dotCount, this.width, this.height)
     this.checkLoop()
+  }
+
+  private triggerPulseReveal(): void {
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    if (this.qualityTier.name === 'low' || reducedMotion || this.pulseRevealed) {
+      this.pulseRevealed = true
+      this.pulseColumnProgress.fill(1)
+      this.render()
+      return
+    }
+
+    if (this.pulseRevealAnimation) {
+      this.pulseRevealAnimation.pause()
+      this.pulseRevealAnimation = null
+    }
+
+    this.pulseColumnProgress.fill(0)
+    const targets = Array.from({ length: 52 }, () => ({ p: 0 }))
+    this.pulseRevealAnimation = animate(targets, {
+      p: 1,
+      duration: 600,
+      delay: stagger(12, { start: 0 }),
+      ease: 'outExpo',
+      onUpdate: () => {
+        for (let c = 0; c < 52; c++) {
+          this.pulseColumnProgress[c] = targets[c]!.p
+        }
+        this.render()
+      },
+      onComplete: () => {
+        this.pulseRevealed = true
+        this.pulseColumnProgress.fill(1)
+        this.pulseRevealAnimation = null
+        this.render()
+      },
+    })
   }
 
   /**
@@ -914,6 +974,16 @@ export class DotEngine {
       this.adoptLayoutGeometry(target)
     } else {
       this.leaveClusters()
+    }
+    if (layout === 'pulse') {
+      this.pulseLastCommitIndex =
+        'lastCommitIndex' in target ? (target as PulseLayoutTarget).lastCommitIndex : -1
+    } else {
+      this.pulseLastCommitIndex = -1
+      if (this.pulseRevealAnimation) {
+        this.pulseRevealAnimation.pause()
+        this.pulseRevealAnimation = null
+      }
     }
 
     for (let i = 0; i < this.dotCount; i++) {
@@ -1119,9 +1189,9 @@ export class DotEngine {
     if (this.isDestroyed) return
     this.rawScan = scan
     const story = this.storyMode
-    const desired = Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP)
+    const desired = calculatePoolSize(Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP))
     if (desired === this.dotCount) {
-      this.dotField = buildDotField(scan, this.dotCount)
+      this.dotField = buildDotField(scan, Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP))
       this.scan = this.dotField.scan
     } else {
       this.allocateDots(Math.min(this.qualityTier.maxDots, HARD_DOT_CAP))
@@ -1217,7 +1287,8 @@ export class DotEngine {
     // Same density as the current field: keep every typed array and any
     // in-flight morph — only pointers/effects and the tier stat change.
     // Rebuilding during a scroll would reset the whole field visually.
-    if (this.dotCount === Math.min(this.rawScan.files.length, QUALITY_TIERS[tier].maxDots, HARD_DOT_CAP)) {
+    const desired = calculatePoolSize(Math.min(this.rawScan.files.length, QUALITY_TIERS[tier].maxDots, HARD_DOT_CAP))
+    if (this.dotCount === desired) {
       this.onTierChange?.(this.qualityTier)
       return
     }
@@ -1267,6 +1338,24 @@ export class DotEngine {
         ? this.folderClusterOf
         : null
     const clustersActive = clusterOf !== null && this.clusterDrag.hasOffsets()
+
+    const reducedMotion =
+      typeof window !== 'undefined' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    const hasPulseShimmer =
+      this.currentLayout === 'pulse' &&
+      this.qualityTier.name === 'high' &&
+      !reducedMotion &&
+      this.pulseRevealed
+
+    let pulseWaveCenter = -999
+    if (hasPulseShimmer) {
+      const cycle = nowMs % 6000
+      const waveDur = 1500
+      if (cycle < waveDur) {
+        pulseWaveCenter = (cycle / waveDur) * 52
+      }
+    }
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -1351,6 +1440,22 @@ export class DotEngine {
         }
       }
 
+      if (this.currentLayout === 'pulse' && i < 364) {
+        const col = Math.floor(i / 7)
+        if (!this.pulseRevealed && !reducedMotion && this.qualityTier.name !== 'low') {
+          const factor = this.pulseColumnProgress[col] ?? 1
+          radius *= factor
+          a *= factor
+        }
+        if (hasPulseShimmer && pulseWaveCenter >= 0) {
+          const dist = Math.abs(col - pulseWaveCenter)
+          if (dist < 4) {
+            const shimmer = Math.cos((dist / 4) * (Math.PI / 2)) * 0.15
+            a = Math.min(1.0, a + shimmer * fade)
+          }
+        }
+      }
+
       // Scan sweep: hold the scan's real colors back until the line
       // passes; the indeterminate shimmer modulates alpha otherwise.
       if (sweepHolds) {
@@ -1384,6 +1489,24 @@ export class DotEngine {
     }
 
     this.sweep.drawLine(ctx, this.width, this.height, this.theme.fg)
+
+    // Last commit day ring in Pulse layout
+    if (
+      this.currentLayout === 'pulse' &&
+      this.pulseLastCommitIndex >= 0 &&
+      this.pulseLastCommitIndex < n
+    ) {
+      const idx = this.pulseLastCommitIndex
+      const dotRadius = this.size[idx] / 2
+      const cx = this.x[idx] + dotRadius
+      const cy = this.y[idx] + dotRadius
+      const ringRadius = Math.max(dotRadius + 3, 5)
+      ctx.strokeStyle = `rgba(${this.theme.fg[0]}, ${this.theme.fg[1]}, ${this.theme.fg[2]}, 0.85)`
+      ctx.lineWidth = 1.5
+      ctx.beginPath()
+      ctx.arc(cx, cy, ringRadius, 0, Math.PI * 2)
+      ctx.stroke()
+    }
   }
 
   public destroy(): void {
@@ -1398,6 +1521,10 @@ export class DotEngine {
     if (this.currentAnimation) {
       this.currentAnimation.revert()
       this.currentAnimation = null
+    }
+    if (this.pulseRevealAnimation) {
+      this.pulseRevealAnimation.revert()
+      this.pulseRevealAnimation = null
     }
     this.crossFadeSnapshot = null
     this.storyMode = false
@@ -1461,16 +1588,32 @@ export class DotEngine {
     fps: number | null
     tier: QualityTier
     dotCount: number
+    poolSize: number
     totalFiles: number
     filesPerDot: number
   } {
     return {
       fps: this.lastMeasuredFps,
       tier: this.qualityTier,
-      dotCount: this.dotCount,
+      dotCount: this.currentLayout === 'pulse' ? 364 : this.dotField.dotCount,
+      poolSize: this.dotCount,
       totalFiles: this.dotField.totalFiles,
       filesPerDot: this.dotField.filesPerDot,
     }
+  }
+
+  public getPulseDay(index: number): ScanPulseDay | null {
+    if (this.currentLayout !== 'pulse' || index < 0 || index >= 364) return null
+    const days = normalizePulseDays(this.scan)
+    return days[index] ?? null
+  }
+
+  public getHoveredDay(): ScanPulseDay | null {
+    return this.getPulseDay(this.hoveredIndex)
+  }
+
+  public getPulseLabels(): PulseLabelsData {
+    return getPulseLabelsData(this.scan, { width: this.width, height: this.height })
   }
 
   public getDotCount(): number {
