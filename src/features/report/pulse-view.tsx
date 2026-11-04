@@ -3,6 +3,7 @@
 import { useMemo, useState, type KeyboardEvent } from 'react'
 import type { Scan } from '@/lib/types/scan'
 import styles from './report.module.css'
+import pulseStyles from './pulse-view.module.css'
 
 export function PulseView({ scan }: { scan: Scan }) {
   const [selected, setSelected] = useState<number | null>(null)
@@ -31,6 +32,9 @@ export function PulseView({ scan }: { scan: Scan }) {
           {scan.pulse && days.length > 0 ? `${scan.pulse.activeWeeks} active weeks · ${scan.pulse.pattern} pattern` : 'No activity data yet'}
         </p>
       </div>
+      <div className={pulseStyles.labels} aria-label="Months">
+        {['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'].map(m => <span key={m}>{m}</span>)}
+      </div>
       <div className={styles.pulseCalendar} role="group" aria-label="Commit activity by day">
         {weeks.map((week, weekIndex) => (
           <div className={styles.pulseWeek} key={weekIndex}>
@@ -51,6 +55,7 @@ export function PulseView({ scan }: { scan: Scan }) {
           </div>
         ))}
         {selected !== null && days[selected] && <p className={styles.pulseTooltip}>{days[selected].date}: {days[selected].commits} commits</p>}
+        <div className={pulseStyles.legend} aria-label="Legend"><span>Less</span><span>More</span></div>
       </div>
       <table className="visually-hidden">
         <caption>Weekly commit totals</caption>

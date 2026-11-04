@@ -1,4 +1,4 @@
-import { animate, stagger } from 'animejs'
+import { animate, stagger, type TweenParamValue } from 'animejs'
 import type { Scan, ScanPulseDay } from '@/lib/types/scan'
 import { MOTION } from './motion'
 import {
@@ -13,8 +13,22 @@ import { calculateLanguagesLayout } from './layouts/languages'
 import { calculateActivityLayout } from './layouts/activity'
 import { calculateFoldersLayout, type FoldersLayoutTarget, type FolderLabel } from './layouts/folders'
 import { calculatePulseLayout, normalizePulseDays, getPulseLabelsData, type PulseLayoutTarget, type PulseLabelsData } from './layouts/pulse'
-import { calculateStructureLayout } from './layouts/structure'
+import {
+  calculateStructureLayout,
+  type StructureLayoutTarget,
+} from './layouts/structure'
+import { groupAt as collectGroupsAt, type StructureGroup } from './layouts/structure-groups'
+import {
+  cycleFocusIndex,
+  isRepoPathWithin,
+  normalizeRepoPath,
+  parentRepoPath,
+  repoPathParts,
+  structureStaggerDelays,
+  type StructureFocusState,
+} from './structure-navigation'
 import { resolveThemeColors } from './colors'
+
 import { SpatialGrid } from './spatial-grid'
 import {
   QUALITY_TIERS,
@@ -42,6 +56,15 @@ export type LayoutName = 'files' | 'languages' | 'pulse' | 'structure' | 'activi
 export interface MorphOptions {
   origin?: 'center' | 'first' | 'last' | [number, number]
   instant?: boolean
+}
+
+export interface DotReadout {
+  index: number
+  path: string
+  language: string | null
+  size: number
+  /** How many files this dot stands for (1 unless the field is aggregated). */
+  files: number
 }
 
 /**
@@ -91,6 +114,10 @@ export interface DotEngineOptions {
   onTierChange?: (tier: QualityTier) => void
   /** Folder cluster offsets in canvas px, flat [x0, y0, x1, y1, ...]. */
   onClusterOffsetsChange?: (offsets: Float32Array, activeSlot: number) => void
+  /** Structure explorer: emitted on entry, exit and every zoom. */
+  onStructureFocusChange?: (state: StructureFocusState) => void
+  /** Structure explorer: the dot selected by the keyboard, or null. */
+  onDotFocusChange?: (readout: DotReadout | null) => void
 }
 
 interface DotProgressTarget {
@@ -189,6 +216,12 @@ export class DotEngine {
   private clusterDrag = new ClusterDragEffect()
   private folderClusterOf: Int32Array | null = null
   private clusterOffsetsScratch = new Float32Array(0)
+  // Structure explorer: folder focus, current targets, keyboard dot focus
+  private structureFocusPath = ''
+  private structureTarget: StructureLayoutTarget | null = null
+  private structureDotOrder = new Int32Array(0)
+  private focusedDotIndex = -1
+  private focusedReadout: DotReadout | null = null
   // Pulse animation states: reveal column sweep, last commit ring
   private pulseRevealed = false
   private pulseColumnProgress = new Float32Array(52).fill(1)
@@ -228,6 +261,8 @@ export class DotEngine {
   private onLayoutChange?: (layout: LayoutName) => void
   private onTierChange?: (tier: QualityTier) => void
   private onClusterOffsetsChange?: (offsets: Float32Array, activeSlot: number) => void
+  private onStructureFocusChange?: (state: StructureFocusState) => void
+  private onDotFocusChange?: (readout: DotReadout | null) => void
 
   // Current layout cache
   private currentLayout: LayoutName = 'files'
@@ -249,6 +284,8 @@ export class DotEngine {
     this.onLayoutChange = options.onLayoutChange
     this.onTierChange = options.onTierChange
     this.onClusterOffsetsChange = options.onClusterOffsetsChange
+    this.onStructureFocusChange = options.onStructureFocusChange
+    this.onDotFocusChange = options.onDotFocusChange
 
     // Reduced motion forces the Low tier from the start (DESIGN.md)
     const reducedMotion =
@@ -358,6 +395,7 @@ export class DotEngine {
 
     this.hoveredIndex = -1
     this.onHoverChange?.(null)
+    this.clearDotFocus()
 
     this.initStartState()
   }
@@ -623,10 +661,17 @@ export class DotEngine {
       }
     }
 
-    this.adoptLayoutGeometry(target)
+    if (this.currentLayout === 'folders') {
+      this.adoptLayoutGeometry(target)
+    }
+    if (this.currentLayout === 'structure') {
+      this.setStructureTarget(target)
+    }
 
     if ((this.currentLayout === 'folders' || this.currentLayout === 'structure') && 'labels' in target) {
       this.onLabelsChange?.((target as FoldersLayoutTarget).labels)
+    } else {
+      this.onLabelsChange?.(null)
     }
 
     this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
@@ -645,7 +690,13 @@ export class DotEngine {
       case 'pulse':
         return calculatePulseLayout(this.scan, viewport, this.theme, this.dotCount)
       case 'structure':
-        return calculateStructureLayout(this.scan, viewport, this.theme, this.dotCount)
+        return calculateStructureLayout(
+          this.scan,
+          viewport,
+          this.theme,
+          this.structureFocusPath,
+          this.dotCount,
+        )
       case 'files':
       default:
         return calculateFilesLayout(this.scan, viewport, this.theme, this.dotCount)
@@ -743,37 +794,61 @@ export class DotEngine {
     this.onClusterOffsetsChange?.(this.clusterOffsetsScratch, this.clusterDrag.getActiveSlot())
   }
 
+  private prefersReducedMotion(): boolean {
+    return (
+      typeof window !== 'undefined' &&
+      typeof window.matchMedia === 'function' &&
+      window.matchMedia('(prefers-reduced-motion: reduce)').matches
+    )
+  }
+
   /**
-   * Morph to layout with anime.js v4 driving progress and stagger from center.
-   * Seamless and glitch-free under rapid switching in any direction.
+   * Stores the Structure geometry and the keyboard order (group slot, then
+   * dot index) so focusNext/focusPrev walk the visible clusters left to right.
    */
-  public morphTo(layout: LayoutName, options?: MorphOptions): void {
-    if (this.isDestroyed) return
-
-    this.currentLayout = layout
-    this.onLayoutChange?.(layout)
-
-    const target = this.getLayoutTarget(layout)
-    if (layout === 'folders' || layout === 'structure') {
-      this.adoptLayoutGeometry(target)
-    } else {
-      this.leaveClusters()
+  private setStructureTarget(target: LayoutTarget): void {
+    if (!('groupOf' in target && 'groupCenters' in target && 'groups' in target)) {
+      this.clearStructureTarget()
+      return
     }
-    if (layout === 'pulse') {
-      this.pulseLastCommitIndex =
-        'lastCommitIndex' in target ? (target as PulseLayoutTarget).lastCommitIndex : -1
-    } else {
-      this.pulseLastCommitIndex = -1
-      if (this.pulseRevealAnimation) {
-        this.pulseRevealAnimation.pause()
-        this.pulseRevealAnimation = null
-      }
-    }
-    const picked = pickMorphOrigin(options?.origin, this.lastClick)
-    // Grid stagger `from: [x, y]` expects grid fractions, not canvas pixels.
-    const origin = Array.isArray(picked) ? pixelOriginToFraction(picked, this.width, this.height) : picked
 
-    // Capture current in-flight positions before stopping previous animation
+    const structure = target as StructureLayoutTarget
+    this.structureTarget = structure
+
+    const order: number[] = []
+    for (let index = 0; index < structure.groupOf.length; index++) {
+      if ((structure.groupOf[index] ?? -1) >= 0) order.push(index)
+    }
+    order.sort((a, b) => ((structure.groupOf[a] ?? -1) - (structure.groupOf[b] ?? -1)) || a - b)
+    this.structureDotOrder = Int32Array.from(order)
+
+    if (
+      this.focusedDotIndex >= 0 &&
+      (this.focusedDotIndex >= structure.groupOf.length ||
+        (structure.groupOf[this.focusedDotIndex] ?? -1) < 0)
+    ) {
+      this.clearDotFocus()
+    }
+  }
+
+  private clearStructureTarget(): void {
+    this.structureTarget = null
+    this.structureDotOrder = new Int32Array(0)
+    this.clearDotFocus()
+  }
+
+  private notifyStructureFocus(): void {
+    this.onStructureFocusChange?.({
+      focusPath: this.structureFocusPath,
+      breadcrumb: repoPathParts(this.structureFocusPath),
+    })
+  }
+
+  /**
+   * Captures the current in-flight dot state, then points every dot at the new
+   * target. Shared by layout morphs and Structure zooms.
+   */
+  private prepareMorphTarget(target: LayoutTarget): void {
     for (let i = 0; i < this.dotCount; i++) {
       const p = this.progressTargets[i].p
       if (p < 1) {
@@ -812,20 +887,23 @@ export class DotEngine {
 
       this.progressTargets[i].p = 0
     }
+  }
 
-    // Stop and discard previous animation
+  private runMorph(
+    target: LayoutTarget,
+    config: {
+      duration: number
+      delay: TweenParamValue
+      instant?: boolean
+      onComplete?: () => void
+    },
+  ): void {
     if (this.currentAnimation) {
       this.currentAnimation.pause()
       this.currentAnimation = null
     }
 
-    this.setLayoutLabels(layout, target)
-
-    const reducedMotion =
-      typeof window !== 'undefined' &&
-      window.matchMedia('(prefers-reduced-motion: reduce)').matches
-
-    if (reducedMotion || options?.instant) {
+    if (config.instant || this.prefersReducedMotion()) {
       for (let i = 0; i < this.dotCount; i++) {
         this.progressTargets[i].p = 1
         this.x[i] = this.targetX[i]
@@ -837,10 +915,7 @@ export class DotEngine {
         this.b[i] = this.targetB[i]
       }
       this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
-      if (layout === 'pulse') {
-        this.pulseRevealed = true
-        this.pulseColumnProgress.fill(1)
-      }
+      config.onComplete?.()
       this.render()
       return
     }
@@ -848,23 +923,276 @@ export class DotEngine {
     // anime.js v4: inOutExpo is the exact v4 easing name
     this.currentAnimation = animate(this.progressTargets, {
       p: 1,
-      duration: MOTION.duration.morph,
-      delay: stagger(MOTION.stagger.morphGridMs, {
-        grid: [target.cols, target.rows],
-        from: origin,
-      }),
+      duration: config.duration,
+      delay: config.delay,
       ease: MOTION.easing.inOut,
       onComplete: () => {
+        this.currentAnimation = null
         this.spatialGrid.build(this.x, this.y, this.size, this.dotCount, this.width, this.height)
-        if (layout === 'pulse') {
-          this.triggerPulseReveal()
-        }
+        config.onComplete?.()
       },
     })
 
     // Build spatial grid with destination coordinates so hover works immediately
     this.spatialGrid.build(target.x, target.y, target.size, this.dotCount, this.width, this.height)
     this.checkLoop()
+  }
+
+  /**
+   * Morph to layout with anime.js v4 driving progress and stagger from center.
+   * Seamless and glitch-free under rapid switching in any direction.
+   */
+  public morphTo(layout: LayoutName, options?: MorphOptions): void {
+    if (this.isDestroyed) return
+
+    const previousLayout = this.currentLayout
+    const hadStructureFocus = this.structureFocusPath !== ''
+    this.currentLayout = layout
+    this.onLayoutChange?.(layout)
+
+    if (layout === 'structure' && previousLayout !== 'structure') {
+      this.structureFocusPath = ''
+    }
+
+    const target = this.getLayoutTarget(layout)
+    if (layout === 'folders') {
+      this.adoptLayoutGeometry(target)
+    } else {
+      this.leaveClusters()
+    }
+
+    if (layout === 'structure') {
+      this.setStructureTarget(target)
+      this.notifyStructureFocus()
+    } else {
+      this.structureFocusPath = ''
+      this.clearStructureTarget()
+      if (previousLayout === 'structure' || hadStructureFocus) this.notifyStructureFocus()
+    }
+
+    if (layout === 'pulse') {
+      this.pulseLastCommitIndex =
+        'lastCommitIndex' in target ? (target as PulseLayoutTarget).lastCommitIndex : -1
+    } else {
+      this.pulseLastCommitIndex = -1
+      if (this.pulseRevealAnimation) {
+        this.pulseRevealAnimation.pause()
+        this.pulseRevealAnimation = null
+      }
+    }
+
+    const picked = pickMorphOrigin(options?.origin, this.lastClick)
+    // Grid stagger `from: [x, y]` expects grid fractions, not canvas pixels.
+    const origin = Array.isArray(picked) ? pixelOriginToFraction(picked, this.width, this.height) : picked
+
+    this.prepareMorphTarget(target)
+    this.setLayoutLabels(layout, target)
+
+    const instant = options?.instant === true || this.prefersReducedMotion()
+    if (instant && layout === 'pulse') {
+      this.pulseRevealed = true
+      this.pulseColumnProgress.fill(1)
+    }
+
+    this.runMorph(target, {
+      duration: MOTION.duration.morph,
+      delay: stagger(MOTION.stagger.morphGridMs, {
+        grid: [target.cols, target.rows],
+        from: origin,
+      }),
+      instant: options?.instant,
+      onComplete: () => {
+        if (layout === 'pulse') this.triggerPulseReveal()
+      },
+    })
+  }
+
+  public getStructureFocus(): StructureFocusState {
+    return {
+      focusPath: this.structureFocusPath,
+      breadcrumb: repoPathParts(this.structureFocusPath),
+    }
+  }
+
+  public getBreadcrumb(): string[] {
+    return repoPathParts(this.structureFocusPath)
+  }
+
+  /** Next folder segments below a focus path; the same helper the layout uses. */
+  public groupAt(path: string = this.structureFocusPath): StructureGroup[] {
+    return collectGroupsAt(this.scan.files, path)
+  }
+
+  /**
+   * Zooms into a zoomable child folder or jumps to an ancestor in the
+   * breadcrumb. Deeper arbitrary paths are rejected.
+   */
+  public zoomTo(path: string): boolean {
+    if (this.isDestroyed || this.storyMode || this.currentLayout !== 'structure') return false
+
+    const destination = normalizeRepoPath(path)
+    if (destination === this.structureFocusPath) return false
+
+    let originX: number | null = null
+    let originY: number | null = null
+
+    const isRoot = destination === ''
+    const isAncestor = destination !== '' && isRepoPathWithin(this.structureFocusPath, destination)
+    if (!isRoot && !isAncestor) {
+      const groups = collectGroupsAt(this.scan.files, this.structureFocusPath)
+      const slot = groups.findIndex((group) => group.zoomable && group.path === destination)
+      if (slot < 0) return false
+      const current = this.structureTarget
+      if (current && slot * 2 + 1 < current.groupCenters.length) {
+        originX = current.groupCenters[slot * 2] ?? null
+        originY = current.groupCenters[slot * 2 + 1] ?? null
+      }
+    }
+
+    this.animateStructureFocus(destination, originX, originY)
+    return true
+  }
+
+  public up(): boolean {
+    if (this.isDestroyed || this.storyMode || this.currentLayout !== 'structure') return false
+    if (this.structureFocusPath === '') return false
+    this.animateStructureFocus(parentRepoPath(this.structureFocusPath), null, null)
+    return true
+  }
+
+  /** Escape goes up one folder; at the root it clears the keyboard dot focus. */
+  public escape(): boolean {
+    if (this.isDestroyed || this.storyMode || this.currentLayout !== 'structure') return false
+    if (this.structureFocusPath !== '') return this.up()
+    if (this.focusedDotIndex !== -1) {
+      this.clearDotFocus()
+      return true
+    }
+    return false
+  }
+
+  public backspace(): boolean {
+    return this.up()
+  }
+
+  public focusNext(): boolean {
+    return this.cycleStructureDot(1)
+  }
+
+  public focusPrev(): boolean {
+    return this.cycleStructureDot(-1)
+  }
+
+  /** Opens the folder cluster that contains the keyboard-focused dot. */
+  public enter(): boolean {
+    if (this.isDestroyed || this.storyMode || this.currentLayout !== 'structure') return false
+    const target = this.structureTarget
+    if (!target || this.focusedDotIndex < 0) return false
+    const slot = target.groupOf[this.focusedDotIndex] ?? -1
+    const group = target.groups[slot]
+    if (!group || !group.zoomable || !group.path) return false
+    return this.zoomTo(group.path)
+  }
+
+  public clearDotFocus(): void {
+    if (this.focusedDotIndex === -1 && this.focusedReadout === null) return
+    this.focusedDotIndex = -1
+    this.focusedReadout = null
+    this.onDotFocusChange?.(null)
+    this.checkLoop()
+  }
+
+  public getFocusedDot(): DotReadout | null {
+    return this.focusedReadout
+  }
+
+  /**
+   * Reads a dot's file facts. Aggregated fields report the representative
+   * file plus how many files the dot stands for.
+   */
+  public getDotReadout(index: number): DotReadout | null {
+    if (index < 0 || index >= this.dotCount) return null
+    if (this.currentLayout === 'pulse') return null
+    const file = this.scan.files[index]
+    if (!file) return null
+
+    let files = 1
+    if (this.dotField.dotCount > 0 && this.dotField.filesPerDot > 1) {
+      const total = this.dotField.totalFiles
+      const count = this.dotField.dotCount
+      files = Math.max(
+        1,
+        Math.floor(((index + 1) * total) / count) - Math.floor((index * total) / count),
+      )
+    }
+
+    return {
+      index,
+      path: file.path,
+      language: file.language,
+      size: file.size,
+      files,
+    }
+  }
+
+  private cycleStructureDot(direction: 1 | -1): boolean {
+    if (this.isDestroyed || this.storyMode || this.currentLayout !== 'structure') return false
+    if (this.structureDotOrder.length === 0) return false
+
+    const current =
+      this.focusedDotIndex >= 0
+        ? this.structureDotOrder.indexOf(this.focusedDotIndex)
+        : -1
+    const next = cycleFocusIndex(current, this.structureDotOrder.length, direction)
+    if (next < 0) return false
+    const index = this.structureDotOrder[next]
+    if (index === undefined) return false
+    this.setFocusedDot(index)
+    return true
+  }
+
+  private setFocusedDot(index: number): void {
+    this.focusedDotIndex = index
+    const readout = this.getDotReadout(index)
+    this.focusedReadout = readout
+    this.onDotFocusChange?.(readout)
+    this.checkLoop()
+  }
+
+  private animateStructureFocus(
+    destination: string,
+    originX: number | null,
+    originY: number | null,
+  ): void {
+    const previous = this.structureTarget
+    this.structureFocusPath = destination
+    this.clearDotFocus()
+
+    const target = this.getLayoutTarget('structure') as StructureLayoutTarget
+    this.setStructureTarget(target)
+    this.notifyStructureFocus()
+    this.onLabelsChange?.(target.labels)
+    this.onLabelsOpacityChange?.(1)
+
+    const ox = originX ?? this.width / 2
+    const oy = originY ?? this.height / 2
+    const delays =
+      this.qualityTier.name === 'low'
+        ? null
+        : structureStaggerDelays(
+            previous?.groupOf ?? target.groupOf,
+            previous?.groupCenters ?? target.groupCenters,
+            this.dotCount,
+            ox,
+            oy,
+            4,
+          )
+
+    this.prepareMorphTarget(target)
+    this.runMorph(target, {
+      duration: MOTION.duration.slow,
+      delay: delays ? (_target, index) => delays[index ?? 0] ?? 0 : 0,
+    })
   }
 
   private triggerPulseReveal(): void {
@@ -913,6 +1241,9 @@ export class DotEngine {
   public prepareStory(layouts: readonly LayoutName[]): void {
     if (this.isDestroyed || layouts.length < 2) return
     this.storyMode = true
+    this.structureFocusPath = ''
+    this.clearDotFocus()
+    this.notifyStructureFocus()
     this.storyLayouts = [...layouts]
     this.storyLayoutIndex = -1
     this.rebuildStoryPlan()
@@ -960,6 +1291,8 @@ export class DotEngine {
       this.currentAnimation = null
     }
 
+    const previousLayout = this.currentLayout
+    const hadStructureFocus = this.structureFocusPath !== ''
     this.storyMode = false
     this.storyLayouts = []
     this.storyTargets = []
@@ -967,14 +1300,28 @@ export class DotEngine {
     this.storyFrames = []
     this.storyLayoutIndex = -1
 
+    if (layout === 'structure' && previousLayout !== 'structure') {
+      this.structureFocusPath = ''
+    }
+
     const snapshot = this.captureSnapshot()
     this.clearCrossFade()
     const target = this.getLayoutTarget(layout)
-    if (layout === 'folders' || layout === 'structure') {
+    if (layout === 'folders') {
       this.adoptLayoutGeometry(target)
     } else {
       this.leaveClusters()
     }
+
+    if (layout === 'structure') {
+      this.setStructureTarget(target)
+      this.notifyStructureFocus()
+    } else {
+      this.structureFocusPath = ''
+      this.clearStructureTarget()
+      if (previousLayout === 'structure' || hadStructureFocus) this.notifyStructureFocus()
+    }
+
     if (layout === 'pulse') {
       this.pulseLastCommitIndex =
         'lastCommitIndex' in target ? (target as PulseLayoutTarget).lastCommitIndex : -1
@@ -1037,6 +1384,7 @@ export class DotEngine {
     this.storyFrames = []
     this.storyLayoutIndex = -1
     this.clearCrossFade()
+    this.clearDotFocus()
     this.onLabelsOpacityChange?.(1)
   }
 
@@ -1045,7 +1393,7 @@ export class DotEngine {
     this.storyDelays = this.storyTargets.slice(1).map((target) =>
       computeStoryDelays(this.dotCount, target.cols, target.rows)
     )
-    const folderIndex = Math.max(this.storyLayouts.indexOf('folders'), this.storyLayouts.indexOf('structure'))
+    const folderIndex = this.storyLayouts.indexOf('folders')
     if (folderIndex !== -1) {
       this.adoptLayoutGeometry(this.storyTargets[folderIndex])
     } else {
@@ -1084,15 +1432,28 @@ export class DotEngine {
     const layout = this.storyLayouts[state.layoutIndex]
     const target = this.storyTargets[state.layoutIndex]
 
-    if (layout && layout !== 'folders' && layout !== 'structure') {
+    if (layout === 'folders' && target) {
+      if (this.folderClusterOf === null) this.adoptLayoutGeometry(target)
+    } else {
       this.leaveClusters()
-    } else if ((layout === 'folders' || layout === 'structure') && target && this.folderClusterOf === null) {
-      this.adoptLayoutGeometry(target)
     }
 
     if (layout && layout !== this.currentLayout) {
       this.currentLayout = layout
       this.onLayoutChange?.(layout)
+    }
+
+    if (indexChanged) {
+      if (layout === 'structure' && target) {
+        this.structureFocusPath = ''
+        this.setStructureTarget(target)
+        this.notifyStructureFocus()
+      } else {
+        const hadStructureFocus = this.structureFocusPath !== ''
+        this.structureFocusPath = ''
+        this.clearStructureTarget()
+        if (hadStructureFocus) this.notifyStructureFocus()
+      }
     }
 
     const hasLabels = (layout === 'folders' || layout === 'structure') && target !== undefined && 'labels' in target
@@ -1145,6 +1506,9 @@ export class DotEngine {
     }
 
     const target = this.getLayoutTarget(this.currentLayout)
+    if (this.currentLayout === 'structure') {
+      this.setStructureTarget(target)
+    }
     if (!options?.instant) {
       for (let i = 0; i < this.dotCount; i++) {
         this.themeStartR[i] = this.r[i]
@@ -1187,6 +1551,11 @@ export class DotEngine {
    */
   public setScan(scan: Scan): void {
     if (this.isDestroyed) return
+    if (this.structureFocusPath !== '') {
+      this.structureFocusPath = ''
+      this.clearDotFocus()
+      this.notifyStructureFocus()
+    }
     this.rawScan = scan
     const story = this.storyMode
     const desired = calculatePoolSize(Math.min(scan.files.length, this.qualityTier.maxDots, HARD_DOT_CAP))
@@ -1334,7 +1703,7 @@ export class DotEngine {
     const sweepHolds = this.sweep.holdsColors()
     const sweepShimmer = sweepHolds && this.sweep.isShimmering()
     const clusterOf =
-      (this.currentLayout === 'folders' || this.currentLayout === 'structure') && this.folderClusterOf?.length === n
+      this.currentLayout === 'folders' && this.folderClusterOf?.length === n
         ? this.folderClusterOf
         : null
     const clustersActive = clusterOf !== null && this.clusterDrag.hasOffsets()
@@ -1356,6 +1725,11 @@ export class DotEngine {
         pulseWaveCenter = (cycle / waveDur) * 52
       }
     }
+
+    let focusRingX = -1
+    let focusRingY = -1
+    let focusRingRadius = 0
+    let focusRingAlpha = 0
 
     // Update positions and draw dots
     for (let i = 0; i < n; i++) {
@@ -1389,6 +1763,7 @@ export class DotEngine {
       let radius = this.size[i] / 2
       let a = this.alpha[i] * fade
       const isHoveredDot = i === hovered
+      const isFocusedDot = this.currentLayout === 'structure' && i === this.focusedDotIndex
 
       // Base canvas-space center of this dot
       let cx = this.x[i] + radius
@@ -1485,7 +1860,22 @@ export class DotEngine {
           ctx.lineWidth = 1.5
           ctx.stroke()
         }
+
+        if (isFocusedDot) {
+          focusRingX = cx
+          focusRingY = cy
+          focusRingRadius = radius + 3
+          focusRingAlpha = Math.min(1, a + 0.2)
+        }
       }
+    }
+
+    if (focusRingX >= 0) {
+      ctx.strokeStyle = `rgba(${this.theme.fg[0]}, ${this.theme.fg[1]}, ${this.theme.fg[2]}, ${focusRingAlpha})`
+      ctx.lineWidth = 2
+      ctx.beginPath()
+      ctx.arc(focusRingX, focusRingY, focusRingRadius, 0, Math.PI * 2)
+      ctx.stroke()
     }
 
     this.sweep.drawLine(ctx, this.width, this.height, this.theme.fg)
@@ -1532,6 +1922,10 @@ export class DotEngine {
     this.storyTargets = []
     this.storyDelays = []
     this.storyFrames = []
+    this.focusedDotIndex = -1
+    this.focusedReadout = null
+    this.structureTarget = null
+    this.structureDotOrder = new Int32Array(0)
 
     if (this.resizeObserver) {
       this.resizeObserver.disconnect()

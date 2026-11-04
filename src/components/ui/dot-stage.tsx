@@ -3,9 +3,10 @@
 import { useEffect, useRef, useState, useImperativeHandle, forwardRef, useMemo, useCallback, useId, useSyncExternalStore, type KeyboardEvent as ReactKeyboardEvent } from 'react'
 import { animate, stagger, createDraggable, type Draggable } from 'animejs'
 import type { Scan } from '@/lib/types/scan'
-import { DotEngine, type MorphOptions, type LayoutName } from '@/engine/renderer'
+import { DotEngine, type DotReadout, type MorphOptions, type LayoutName } from '@/engine/renderer'
 import type { QualityTier } from '@/engine/quality'
 import type { FolderLabel } from '@/engine/layouts/folders'
+import type { StructureFocusState } from '@/engine/structure-navigation'
 import { CLUSTER_SPRING } from '@/engine/effects/drag-clusters'
 import { THEME_WAVE_EVENT } from '@/lib/theme-wave'
 import styles from './dot-stage.module.css'
@@ -26,6 +27,8 @@ export interface DotStageProps {
   onEngineReady?: (engine: DotEngine | null) => void
   /** 'scrub' lets the dot engine drive label opacity for scroll-linked story frames. */
   labelMode?: 'animate' | 'scrub'
+  /** Dev-only Structure explorer: zoomable labels, breadcrumb and dot keyboard focus. */
+  structureNavigation?: boolean
 }
 
 export interface DotStageHandle {
@@ -65,21 +68,28 @@ function subscribeReducedMotion(onChange: () => void): () => void {
 }
 
 export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotStage(
-  { scan, className, ariaLabel, initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady, labelMode = 'animate' },
+  { scan, className, ariaLabel, initialLayout = 'files', onLayoutChange, showDevOverlay = false, variant = 'full', onStageElementReady, onEngineReady, labelMode = 'animate', structureNavigation = false },
   ref
 ) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const labelsRef = useRef<HTMLDivElement>(null)
+  const breadcrumbRef = useRef<HTMLElement>(null)
   const labelOpacityRef = useRef(1)
   const engineRef = useRef<DotEngine | null>(null)
   const labelButtonsRef = useRef(new Map<string, HTMLButtonElement>())
   const draggablesRef = useRef<(Draggable | null)[]>([])
   const folderHelpId = useId()
+  const structureHelpId = useId()
 
   const [currentLayout, setCurrentLayout] = useState<LayoutName>(initialLayout)
   const [hoveredFileIndex, setHoveredFileIndex] = useState<number | null>(null)
   const [folderLabels, setFolderLabels] = useState<FolderLabel[] | null>(null)
+  const [structureFocus, setStructureFocus] = useState<StructureFocusState>({
+    focusPath: '',
+    breadcrumb: [],
+  })
+  const [focusedReadout, setFocusedReadout] = useState<DotReadout | null>(null)
   const [stats, setStats] = useState<{
     fps: number | null
     tier: QualityTier | null
@@ -170,6 +180,47 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     engineRef.current?.resetClusters()
   }, [])
 
+  const structureNavActive = structureNavigation && currentLayout === 'structure'
+
+  const handleStructurePath = useCallback((path: string) => {
+    engineRef.current?.zoomTo(path)
+    containerRef.current?.focus()
+  }, [])
+
+  const handleStageKeyDown = useCallback((event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const engine = engineRef.current
+    if (!engine) return
+
+    if (event.key === 'Escape' || event.key === 'Backspace') {
+      event.preventDefault()
+      if (event.key === 'Escape') engine.escape()
+      else engine.backspace()
+      return
+    }
+
+    // Label and breadcrumb buttons own their own Enter, Space and arrow keys.
+    if (event.target !== event.currentTarget) return
+
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        event.preventDefault()
+        engine.focusNext()
+        break
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        event.preventDefault()
+        engine.focusPrev()
+        break
+      case 'Enter':
+        event.preventDefault()
+        engine.enter()
+        break
+      default:
+        break
+    }
+  }, [])
+
   // Calculate language distribution for legend
   const languageStats = useMemo(() => {
     const totalFiles = scan.files.length || 1
@@ -221,6 +272,12 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         readEngineStats()
       },
       onClusterOffsetsChange: applyClusterOffsets,
+      onStructureFocusChange: (state) => {
+        setStructureFocus(state)
+      },
+      onDotFocusChange: (readout) => {
+        setFocusedReadout(readout)
+      },
     })
     engineRef.current = engine
     onEngineReady?.(engine)
@@ -292,10 +349,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     const elements = container.querySelectorAll<HTMLElement>('[data-label-text]')
     if (elements.length === 0) return
 
+    // A Structure zoom starts its label fade immediately; a layout entry keeps
+    // the reference 800 ms hold.
+    const start = structureNavActive ? 0 : 800
+
     const animation = animate(elements, {
       opacity: [0, 1],
       translateY: [10, 0],
-      delay: stagger(90, { start: 800 }),
+      delay: stagger(90, { start }),
       duration: 600,
       ease: 'outQuad',
     })
@@ -303,14 +364,14 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     return () => {
       animation.revert()
     }
-  }, [folderLabels, labelMode])
+  }, [folderLabels, labelMode, structureNavActive])
 
   // Signature 9: make the folder labels draggable. The engine owns the physics
   // (reflow stars, throw, settle) and createDraggable owns the input gesture.
   useEffect(() => {
     const engine = engineRef.current
     const container = containerRef.current
-    if (!engine || !container || !folderLabels || folderLabels.length === 0) {
+    if (!engine || !container || currentLayout !== 'folders' || !folderLabels || folderLabels.length === 0) {
       draggablesRef.current = []
       return
     }
@@ -322,7 +383,7 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
     }
 
     const instances = folderLabels.map((label, slot) => {
-      const element = labelButtonsRef.current.get(label.folder)
+      const element = labelButtonsRef.current.get(label.key ?? label.folder)
       if (!element) return null
       return createDraggable(element, {
         container,
@@ -358,29 +419,65 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
       for (const instance of instances) instance?.revert()
       draggablesRef.current = []
     }
-  }, [folderLabels, reducedMotion, applyClusterOffsets])
+  }, [folderLabels, currentLayout, reducedMotion, applyClusterOffsets])
+
+  // Slide the breadcrumb in on every Structure focus change.
+  useEffect(() => {
+    if (!structureNavActive || !breadcrumbRef.current || reducedMotion) return
+    const animation = animate(breadcrumbRef.current, {
+      opacity: [0, 1],
+      translateY: [-6, 0],
+      duration: 300,
+      ease: 'outQuad',
+    })
+    return () => {
+      animation.revert()
+    }
+  }, [structureFocus.focusPath, structureNavActive, reducedMotion])
 
   const stageClassName = className ? `${styles.stage} ${className}` : styles.stage
 
   // Hover readout text
   const readoutContent = useMemo(() => {
-    if (hoveredFileIndex === null) {
-      return currentLayout === 'pulse' ? 'Hover a day to see commits.' : 'Hover a dot to see its file.'
-    }
     if (currentLayout === 'pulse') {
+      if (hoveredFileIndex === null) return 'Hover a day to see commits.'
       const day = engineRef.current?.getPulseDay(hoveredFileIndex) ?? scan.pulse?.days?.[hoveredFileIndex]
       if (day) {
         return formatPulseDate(day.date, day.commits)
       }
       return 'Hover a day to see commits.'
     }
-    const file = scan.files[hoveredFileIndex]
-    if (!file) return 'Hover a dot to see its file.'
-    return `${file.path}, ${file.language || 'Other'}, ${formatBytes(file.size)}`
-  }, [hoveredFileIndex, scan.files, scan.pulse, currentLayout])
+
+    const hoveredReadout =
+      hoveredFileIndex !== null
+        ? engineRef.current?.getDotReadout(hoveredFileIndex) ?? null
+        : null
+    const readout = hoveredReadout ?? focusedReadout
+    if (readout) {
+      const filesPrefix = readout.files > 1 ? `${readout.files} files, ` : ''
+      const focusSuffix = hoveredReadout ? '' : ' (focused)'
+      return `${filesPrefix}${readout.path}, ${readout.language || 'Other'}, ${formatBytes(readout.size)}${focusSuffix}`
+    }
+
+    if (structureNavActive) {
+      return 'Arrow keys inspect dots. Enter opens their folder. Backspace goes up.'
+    }
+    if (currentLayout === 'structure') {
+      return 'Folder clusters. Each label names a folder and its file count.'
+    }
+    return 'Hover a dot to see its file.'
+  }, [hoveredFileIndex, currentLayout, focusedReadout, structureNavActive, scan.pulse])
 
   return (
-    <div ref={containerRef} className={stageClassName} data-clean-zone>
+    <div
+      ref={containerRef}
+      className={stageClassName}
+      data-clean-zone
+      tabIndex={structureNavActive ? 0 : undefined}
+      role={structureNavActive ? 'group' : undefined}
+      aria-label={structureNavActive ? `Folder explorer for ${scan.owner}/${scan.name}` : undefined}
+      onKeyDown={structureNavActive ? handleStageKeyDown : undefined}
+    >
       <canvas
         ref={canvasRef}
         className={styles.canvas}
@@ -396,47 +493,124 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         </p>
       )}
 
+      {structureNavActive && (
+        <nav ref={breadcrumbRef} className={styles.breadcrumb} aria-label="Folder path">
+          <span className={styles.crumbList}>
+            <button
+              type="button"
+              className={styles.crumbButton}
+              aria-current={structureFocus.focusPath === '' ? 'page' : undefined}
+              onClick={() => handleStructurePath('')}
+            >
+              root
+            </button>
+            {structureFocus.breadcrumb.map((part, index) => {
+              const path = structureFocus.breadcrumb.slice(0, index + 1).join('/')
+              return (
+                <span key={path} className={styles.crumbPart}>
+                  <span className={styles.crumbSep} aria-hidden="true">
+                    /
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.crumbButton}
+                    aria-current={path === structureFocus.focusPath ? 'page' : undefined}
+                    onClick={() => handleStructurePath(path)}
+                  >
+                    {part}
+                  </button>
+                </span>
+              )
+            })}
+            <button
+              type="button"
+              className={styles.crumbUp}
+              onClick={() => {
+                engineRef.current?.up()
+                containerRef.current?.focus()
+              }}
+              disabled={structureFocus.focusPath === ''}
+            >
+              Up
+            </button>
+          </span>
+        </nav>
+      )}
+
       {/* Folders layout labels. Drag a label to move its cluster. */}
       <div
         ref={labelsRef}
         className={styles.labels}
         inert={currentLayout !== 'folders' && currentLayout !== 'structure'}
       >
-        {folderLabels?.map((l, slot) => (
-          <div
-            key={l.folder}
-            className={styles.labelAnchor}
-            style={{
-              left: `${l.x}px`,
-              top: `${l.y}px`,
-            }}
-          >
-            <button
-              type="button"
-              ref={(element) => {
-                if (element) labelButtonsRef.current.set(l.folder, element)
-                else labelButtonsRef.current.delete(l.folder)
-              }}
-              className={reducedMotion ? `${styles.lab} ${styles.labStatic}` : styles.lab}
-              aria-label={
-                reducedMotion
-                  ? `${l.folder}, ${l.count} files. Use the arrow keys to move it.`
-                  : `${l.folder}, ${l.count} files. Drag to move, or use the arrow keys.`
-              }
-              aria-describedby={folderHelpId}
-              onKeyDown={(event) => handleLabelKeyDown(event, slot)}
-            >
-              <span className={styles.labPos}>
-                <span className={styles.labText} data-label-text>
-                  {l.folder} ({l.count})
-                </span>
+        {folderLabels?.map((l, slot) => {
+          const labelKey = l.key ?? l.folder
+          const isStructureLabel = currentLayout === 'structure'
+          const targetPath = typeof l.path === 'string' ? l.path : null
+          const canZoom = structureNavActive && isStructureLabel && l.zoomable === true && targetPath !== null
+
+          const labelContent = (
+            <span className={styles.labPos}>
+              <span className={styles.labText} data-label-text>
+                {l.folder} ({l.count})
               </span>
-            </button>
-          </div>
-        ))}
+            </span>
+          )
+
+          if (isStructureLabel && !canZoom) {
+            return (
+              <div
+                key={labelKey}
+                className={styles.labelAnchor}
+                style={{ left: `${l.x}px`, top: `${l.y}px` }}
+              >
+                <span className={`${styles.lab} ${styles.labStatic} ${styles.labReadonly}`}>
+                  {labelContent}
+                </span>
+              </div>
+            )
+          }
+
+          return (
+            <div
+              key={labelKey}
+              className={styles.labelAnchor}
+              style={{ left: `${l.x}px`, top: `${l.y}px` }}
+            >
+              <button
+                type="button"
+                ref={(element) => {
+                  if (element) labelButtonsRef.current.set(labelKey, element)
+                  else labelButtonsRef.current.delete(labelKey)
+                }}
+                className={
+                  canZoom
+                    ? `${styles.lab} ${styles.labZoom}`
+                    : reducedMotion
+                      ? `${styles.lab} ${styles.labStatic}`
+                      : styles.lab
+                }
+                aria-label={
+                  canZoom
+                    ? `${l.folder}, ${l.count} files. Opens this folder.`
+                    : reducedMotion
+                      ? `${l.folder}, ${l.count} files. Use the arrow keys to move it.`
+                      : `${l.folder}, ${l.count} files. Drag to move, or use the arrow keys.`
+                }
+                aria-describedby={canZoom ? structureHelpId : folderHelpId}
+                onClick={canZoom && targetPath ? () => handleStructurePath(targetPath) : undefined}
+                onKeyDown={
+                  canZoom ? undefined : (event) => handleLabelKeyDown(event, slot)
+                }
+              >
+                {labelContent}
+              </button>
+            </div>
+          )
+        })}
       </div>
 
-      {folderLabels && folderLabels.length > 0 && (
+      {currentLayout === 'folders' && folderLabels && folderLabels.length > 0 && (
         <>
           <p id={folderHelpId} className="visually-hidden">
             Folder clusters can be moved. With the keyboard, focus a folder label and use the
@@ -459,8 +633,26 @@ export const DotStage = forwardRef<DotStageHandle, DotStageProps>(function DotSt
         </>
       )}
 
-      {/* Hover readout top left */}
-      {variant === 'full' && <p className={styles.readout} data-q aria-live="polite">{readoutContent}</p>}
+      {structureNavActive && (
+        <p id={structureHelpId} className="visually-hidden">
+          Structure explorer. Use the arrow keys to inspect dots, Enter to open the folder of the
+          focused dot, and Backspace or Escape to go up one level. The breadcrumb parts and folder
+          labels are buttons.
+        </p>
+      )}
+
+      {/* Hover and keyboard-focus readout */}
+      {variant === 'full' && (
+        <p
+          className={
+            structureNavActive ? `${styles.readout} ${styles.readoutStructure}` : styles.readout
+          }
+          data-q
+          aria-live="polite"
+        >
+          {readoutContent}
+        </p>
+      )}
 
       {/* Legend bottom left */}
       {variant === 'full' && (

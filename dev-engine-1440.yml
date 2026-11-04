@@ -1,0 +1,160 @@
+- generic [active] [ref=e1]:
+  - link "Skip to content" [ref=e2] [cursor=pointer]:
+    - /url: "#main-content"
+  - banner [ref=e3]:
+    - generic [ref=e4]:
+      - link "stipple" [ref=e5] [cursor=pointer]:
+        - /url: /
+        - generic [aria-hidden] [ref=e14]:
+          - generic [ref=e15]: s
+          - generic [ref=e16]: t
+          - generic [ref=e17]: i
+          - generic [ref=e18]: p
+          - generic [ref=e19]: p
+          - generic [ref=e20]: l
+          - generic [ref=e21]: e
+      - button "Switch to dark theme" [ref=e163] [cursor=pointer]
+  - main [ref=e26]:
+    - generic [ref=e28]:
+      - generic [ref=e29]:
+        - generic [ref=e30]:
+          - heading "Dot Engine Dev Stage" [level=1] [ref=e31]
+          - paragraph [ref=e32]: "Phase 2 checkpoint: Files, Languages, Activity, and Folders layouts. Morphs seamlessly in every direction using anime.js v4, spatial-grid hover detection, and animated cluster labels."
+        - generic [ref=e33]:
+          - group "Visualization layouts" [ref=e34]:
+            - button "Files" [pressed] [ref=e35] [cursor=pointer]
+            - button "Languages" [ref=e36] [cursor=pointer]
+            - button "Pulse" [ref=e37] [cursor=pointer]
+            - button "Structure" [ref=e38] [cursor=pointer]
+            - button "Activity" [ref=e39] [cursor=pointer]
+            - button "Folders" [ref=e40] [cursor=pointer]
+          - generic [ref=e41]:
+            - status [ref=e42]: Files layout active (240 dots)
+            - button "Rapid switch test" [ref=e43] [cursor=pointer]
+            - button "Show Table" [ref=e44] [cursor=pointer]
+      - generic [ref=e45]:
+        - 'img "Repository visual for stipple/stipple: 240 files drawn as a field of dots" [ref=e46]'
+        - paragraph [aria-hidden]: 105 fps · tier High · 240 dots
+        - paragraph: Hover a dot to see its file.
+        - group "Visualization legend":
+          - generic: 240 files
+          - generic: TypeScript 50%
+          - generic: CSS 7%
+          - generic: JavaScript 15%
+          - generic: HTML 4%
+          - generic: Other 25%
+      - generic [ref=e47]:
+        - generic [ref=e48]:
+          - strong [ref=e49]: Active Layout
+          - text: 24×10 centered grid, language-coded colors (c1..c5, fg when no languages) with 0.85 opacity.
+        - generic [ref=e50]:
+          - strong [ref=e51]: Hover Spatial Grid
+          - text: O(1) localized bucket lookup, radius 24px, 80px fisheye lift.
+        - generic [ref=e52]:
+          - strong [ref=e53]: Motion & Stagger
+          - text: 1200ms inOutExpo, 6ms grid stagger from center in all directions.
+        - generic [ref=e54]:
+          - strong [ref=e55]: Folder Labels
+          - text: Fade in with 600ms outQuad after 800ms stagger in Folders view.
+        - generic [ref=e56]:
+          - strong [ref=e57]: Structure Zoom
+          - text: 900ms inOutExpo, 4ms stagger from the clicked cluster. Labels and breadcrumb zoom in; arrow keys inspect dots.
+      - generic [ref=e59]:
+        - heading "Repository Dataset Summary (240 files)" [level=2]
+        - generic:
+          - generic [ref=e60]:
+            - heading "Languages" [level=3] [ref=e61]
+            - table [ref=e62]:
+              - caption [ref=e63]: Languages
+              - rowgroup [ref=e64]:
+                - row [ref=e65]:
+                  - columnheader "Language" [ref=e66]
+                  - columnheader "Files" [ref=e67]
+                  - columnheader "Share" [ref=e68]
+              - rowgroup [ref=e69]:
+                - row [ref=e70]:
+                  - cell "TypeScript" [ref=e71]
+                  - cell "120" [ref=e72]
+                  - cell "50%" [ref=e73]
+                - row [ref=e74]:
+                  - cell "CSS" [ref=e75]
+                  - cell "16" [ref=e76]
+                  - cell "7%" [ref=e77]
+                - row [ref=e78]:
+                  - cell "JavaScript" [ref=e79]
+                  - cell "35" [ref=e80]
+                  - cell "15%" [ref=e81]
+                - row [ref=e82]:
+                  - cell "HTML" [ref=e83]
+                  - cell "9" [ref=e84]
+                  - cell "4%" [ref=e85]
+                - row [ref=e86]:
+                  - cell "Other" [ref=e87]
+                  - cell "60" [ref=e88]
+                  - cell "25%" [ref=e89]
+          - generic [ref=e90]:
+            - heading "Top Folders" [level=3] [ref=e91]
+            - table [ref=e92]:
+              - caption [ref=e93]: Top folders
+              - rowgroup [ref=e94]:
+                - row [ref=e95]:
+                  - columnheader "Folder" [ref=e96]
+                  - columnheader "Files" [ref=e97]
+                  - columnheader "Share" [ref=e98]
+              - rowgroup [ref=e99]:
+                - row [ref=e100]:
+                  - cell "src/components" [ref=e101]
+                  - cell "98" [ref=e102]
+                  - cell "41%" [ref=e103]
+                - row [ref=e104]:
+                  - cell "src/hooks" [ref=e105]
+                  - cell "30" [ref=e106]
+                  - cell "13%" [ref=e107]
+                - row [ref=e108]:
+                  - cell "src/lib" [ref=e109]
+                  - cell "52" [ref=e110]
+                  - cell "22%" [ref=e111]
+                - row [ref=e112]:
+                  - cell "public" [ref=e113]
+                  - cell "38" [ref=e114]
+                  - cell "16%" [ref=e115]
+                - row [ref=e116]:
+                  - cell "tests" [ref=e117]
+                  - cell "22" [ref=e118]
+                  - cell "9%" [ref=e119]
+          - generic [ref=e120]:
+            - heading "Weekly Activity" [level=3] [ref=e121]
+            - table [ref=e122]:
+              - caption [ref=e123]: Weekly activity
+              - rowgroup [ref=e124]:
+                - row [ref=e125]:
+                  - columnheader "Week" [ref=e126]
+                  - columnheader "Commits" [ref=e127]
+              - rowgroup [ref=e128]:
+                - row [ref=e129]:
+                  - cell "Week 16 (2026-07-06)" [ref=e130]
+                  - cell "1" [ref=e131]
+                - row [ref=e132]:
+                  - cell "Week 15 (2026-07-13)" [ref=e133]
+                  - cell "1" [ref=e134]
+                - row [ref=e135]:
+                  - cell "Week 14 (2026-07-20)" [ref=e136]
+                  - cell "21" [ref=e137]
+                - row [ref=e138]:
+                  - cell "Week 13 (2026-07-27)" [ref=e139]
+                  - cell "29" [ref=e140]
+                - row [ref=e141]:
+                  - cell "Week 12 (2026-08-03)" [ref=e142]
+                  - cell "29" [ref=e143]
+                - row [ref=e144]:
+                  - cell "Week 11 (2026-08-10)" [ref=e145]
+                  - cell "17" [ref=e146]
+                - row [ref=e147]:
+                  - cell "Week 10 (2026-08-17)" [ref=e148]
+                  - cell "84" [ref=e149]
+                - row [ref=e150]:
+                  - cell "Week 9 (2026-08-24)" [ref=e151]
+                  - cell "29" [ref=e152]
+  - contentinfo [ref=e153]: Design prototype for approval. Demo data is generated from the repo name.
+  - button "Open Next.js Dev Tools" [ref=e159] [cursor=pointer]
+  - alert [ref=e164]

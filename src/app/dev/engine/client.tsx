@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useRef, useState, type KeyboardEvent } from 'react'
+import { useCallback, useEffect, useRef, useState, type KeyboardEvent } from 'react'
 import type { Scan } from '@/lib/types/scan'
 import { DotStage, type DotStageHandle } from '@/components/ui/dot-stage'
 import type { LayoutName } from '@/engine/renderer'
@@ -26,6 +26,11 @@ const LAYOUTS: { id: LayoutName; label: string; desc: string }[] = [
     desc: '52×7 calendar of daily commits (364 dots), commit levels, accent color, and last commit ring.',
   },
   {
+    id: 'structure',
+    label: 'Structure',
+    desc: 'Folder explorer: phyllotaxis clusters by the next folder segment. Zoom with labels, the breadcrumb, or the keyboard.',
+  },
+  {
     id: 'activity',
     label: 'Activity',
     desc: '16 weekly columns, c1 color, opacity gradient 0.2 to 1.0 by recency.',
@@ -43,6 +48,10 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
   const [showTable, setShowTable] = useState(false)
   const [statusMsg, setStatusMsg] = useState('Files layout active (240 dots)')
   const statusTimerRef = useRef<number | null>(null)
+
+  const handleLayoutChange = useCallback((layout: LayoutName) => {
+    setActiveLayout(layout)
+  }, [])
 
   useEffect(() => {
     return () => {
@@ -82,7 +91,7 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
   // Rapid switching test to verify animation stability and zero glitches
   const handleRapidTest = () => {
     setStatusMsg('Rapid switching test in progress...')
-    const sequence: LayoutName[] = ['languages', 'pulse', 'folders', 'activity', 'files', 'pulse']
+    const sequence: LayoutName[] = ['languages', 'pulse', 'structure', 'folders', 'activity', 'files', 'pulse']
     sequence.forEach((layout, index) => {
       setTimeout(() => {
         setActiveLayout(layout)
@@ -220,9 +229,10 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
       <DotStage
         ref={stageRef}
         scan={scan}
-        initialLayout={activeLayout}
-        onLayoutChange={(l) => setActiveLayout(l)}
+        initialLayout="files"
+        onLayoutChange={handleLayoutChange}
         showDevOverlay
+        structureNavigation
       />
 
       {/* Specifications & Layout Summary */}
@@ -260,6 +270,13 @@ export function DevEngineClient({ scan }: DevEngineClientProps) {
             Folder Labels
           </strong>
           Fade in with 600ms outQuad after 800ms stagger in Folders view.
+        </div>
+        <div>
+          <strong style={{ color: 'var(--fg)', display: 'block', marginBottom: '4px' }}>
+            Structure Zoom
+          </strong>
+          900ms inOutExpo, 4ms stagger from the clicked cluster. Labels and breadcrumb
+          zoom in; arrow keys inspect dots.
         </div>
       </div>
 

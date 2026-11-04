@@ -6,6 +6,14 @@ export interface FolderLabel {
   count: number
   x: number
   y: number
+  /** Structure labels: full path to zoom into (null for synthetic buckets). */
+  path?: string | null
+  /** Structure labels: true when clicking the label can zoom in. */
+  zoomable?: boolean
+  /** React key that stays unique across zoom levels. */
+  key?: string
+  /** Structure labels: true for the '(files here)' bucket. */
+  isFilesHere?: boolean
 }
 
 export interface FoldersLayoutTarget extends LayoutTarget {
